@@ -1,165 +1,71 @@
-# EDMS Document Routing via NLP and Machine Learning
+# Confidence-aware document routing for EDMS — reproducible pipeline
 
-> **Paper:** "Enhancement of Document Routing Procedures in Electronic Document Management Systems Through Natural Language Processing and Machine Learning Algorithms"  
-> **Authors:** Kurban KOTAN, Serdar KIRIŞOĞLU  
-> **Submitted to:** Applied Soft Computing (Elsevier)
+Code, splits and evaluation protocol for the study *"Confidence-aware routing of institutional documents in electronic
+document management systems: a leakage-controlled benchmark of lexical, embedding, fine-tuned and large language model
+classifiers"* (Kotan & Kırışoğlu). The pipeline routes Turkish official documents of a university EDMS to the
+organisational unit that must act on them, and turns the classifier into a routing mechanism with top-k suggestions,
+confidence-based deferral to staff and an optional retrieval-augmented LLM second stage.
 
----
-
-## Overview
-
-This repository contains the full experimental pipeline for automated document routing in Electronic Document Management Systems (EDMS) using NLP-based embedding models and supervised machine learning classifiers.
-
-**126 model combinations** were evaluated across:
-- **7 language representation models:** BERT, ALBERT, RoBERTa, USE, Word2Vec, GloVe, FastText
-- **3 preprocessing strategies:** English translation, Lemmatisation, Stemming
-- **6 classifiers:** Logistic Regression, K-Nearest Neighbours, Decision Tree, Random Forest, Gaussian Naïve Bayes, SVM
-
-**Best result:** USE + Lemma + SVM → **74.27% Accuracy**, **71.62% weighted F1-Score**
-
----
-
-## Repository Structure
+## Layout
 
 ```
-edms-nlp-routing/
-│
-├── src/
-│   └── train_and_evaluate.py     # Main experimental script
-│
-├── data/
-│   ├── raw_dataset.xlsx          # Place raw EDMS dataset here (see Data section)
-│   └── preprocessed_data.pkl     # Auto-generated cache after first run
-│
-├── models/                       # Place pre-trained model files here
-│   ├── GloVe/
-│   │   └── glove.840B.300d-001.txt
-│   ├── Word2Vec/
-│   │   └── word2vec-google-news-300.bin
-│   ├── USE/                      # TF Hub SavedModel directory
-│   └── FastText/
-│       └── cc.en.300.bin
-│
-├── results/
-│   └── Final_Supervised_Performance.xlsx   # Auto-generated results
-│
-├── requirements.txt
-└── README.md
+data/        raw_dataset.xlsx (restricted; not in the repository), documents.pkl, text_variants.pkl
+src/
+  prepare_data.py     dispatch log -> document table, labels, chronological split, grouped folds, dataset_stats.json
+  preprocess.py       Turkish-native variants (raw / Snowball stem / Zeyrek lemma) + English translation arm
+  common.py           shared protocol: validation-based selection, test once, grouped 5x2 CV, metrics, bootstrap, McNemar
+  run_tfidf.py        lexical models and ablations (preprocessing, input field, translation, sender context)
+  embed.py            frozen sentence-embedding extraction (cached .npy)
+  run_embeddings.py   classifier grid on frozen embeddings
+  run_emb_parallel.py the frozen-embedding grid as parallel jobs (one representation and one results file per job)
+  finetune.py         end-to-end fine-tuning (BERTurk, XLM-R): selection on validation, 3 seeds, optional CV
+  llm.py              LLM routing (zero-shot / retrieval-augmented), de-identification, resumable JSONL cache,
+                      answer parsing and a second pass (--requery) for answers without a valid unit
+  analysis.py         tables (results/tables.xlsx) and figures (figures/)
+  routing.py          calibration (temperature scaling, ECE), deferral rules and hierarchical back-off to department offices
+paper/       extra_stats.py, make_manuscript.py + render_docx.js (manuscript generated from the result files)
+results/     dataset_stats.json, results_*.csv, preds/, preds_val/, val_grid/, ft_runs_v2/, tables/, llm/
+figures/
+EBYS_Routing_Colab.ipynb   the whole pipeline as a resumable Colab notebook (Drive-backed)
 ```
 
----
+## Protocol in one paragraph
 
-## Requirements
+Documents dated up to 2021-12-31 form the training partition, 2022 H1 the validation partition and 2022 H2 the test
+partition. Every hyper-parameter and the classifier family of every representation are chosen on the validation
+partition by macro-F1; the selected configuration is refitted on train+validation and evaluated **once** on the test
+partition (predictions and class scores are stored in `results/preds/`). A stratified **group** 5-fold cross-validation
+with two repeats (groups = identical texts) gives the complementary variance estimate. Deferral thresholds and the LLM
+cascade share are chosen on validation predictions (`results/preds_val/`) and applied unchanged to the test partition.
+
+## Running
 
 ```bash
 pip install -r requirements.txt
+python src/prepare_data.py && python src/preprocess.py
+python src/run_tfidf.py                                   # lexical models (+ --with_sender for the context variant)
+python src/embed.py && python src/run_emb_parallel.py    # frozen encoders (embedding extraction on a GPU)
+python src/finetune.py --cv                               # fine-tuned encoders (GPU)
+python src/llm.py --smoke && python src/llm.py            # needs API keys in the environment
+python src/llm.py --requery && python src/llm.py --summarise
+python src/analysis.py && python src/routing.py          # tables + figures, calibration and hierarchical routing
+python paper/extra_stats.py                               # further statistics quoted in the paper
 ```
 
-**requirements.txt** covers:
-```
-sentence-transformers>=2.2.0
-deep-translator>=1.9.0
-scikit-learn>=1.2.0
-pandas>=1.5.0
-numpy>=1.23.0
-nltk>=3.7
-beautifulsoup4>=4.11.0
-gensim>=4.2.0
-tensorflow>=2.10.0
-tensorflow-hub>=0.13.0
-fasttext>=0.9.2
-openpyxl>=3.0.0
-```
+All scripts are resumable: finished representations, embeddings, fine-tuning runs and LLM responses are skipped on
+re-runs. Seeds: data folds 0/1, classifiers 0, fine-tuning 0/1/2, bootstrap 0.
 
----
+## Data availability
 
-## Pre-trained Models
+The raw EDMS export contains personal data and is available only under the conditions of the institutional ethics
+approval. The repository releases the construction script, the document identifiers of every partition and fold
+(`results/dataset_stats.json` and the identifiers stored with every prediction file), all predictions, prompts and
+configuration, so that the evaluation can be audited without the raw data.
 
-Download the following models manually and place them in the `models/` directory:
+## LLM settings
 
-| Model | Source | Notes |
-|-------|--------|-------|
-| GloVe (840B, 300d) | [Stanford NLP](https://nlp.stanford.edu/projects/glove/) | `glove.840B.300d.txt` |
-| Word2Vec (Google News) | [Google Archive](https://code.google.com/archive/p/word2vec/) | `GoogleNews-vectors-negative300.bin` |
-| FastText (English, cc.en.300) | [Meta AI](https://fasttext.cc/docs/en/crawl-vectors.html) | `cc.en.300.bin` |
-| USE (Universal Sentence Encoder) | [TF Hub](https://tfhub.dev/google/universal-sentence-encoder/4) | SavedModel format |
-
-BERT, ALBERT, and RoBERTa are downloaded automatically via `sentence-transformers`.
-
----
-
-## Dataset
-
-The dataset used in this study consists of **33,829 official correspondence records** from Düzce University's EDMS (January 2021 – December 2022), collected under institutional ethics board approval.
-
-**Due to ethics committee conditions, the full dataset cannot be released publicly.** A processed, anonymised sample will be made available upon journal acceptance. Please contact the corresponding author for research collaboration inquiries: `kurban.kotan@cbu.edu.tr`
-
-Place your dataset as `data/raw_dataset.xlsx` with the following columns:
-- `EvrakId` — Document ID
-- `EvrakKonusu` — Document subject
-- `EvrakIcerigi` — Document content
-- `EvrakinGeregineKisiKullaniciBirimi` — Target routing unit (label)
-
----
-
-## Usage
-
-```bash
-python src/train_and_evaluate.py
-```
-
-On first run, the script will:
-1. Load and clean the raw dataset
-2. Apply preprocessing (noise removal, stopword filtering, stemming/lemmatisation)
-3. Translate Turkish text to English via Google Translate API
-4. Cache the processed data to `data/preprocessed_data.pkl`
-
-On subsequent runs, the cached file is loaded directly (skipping translation).
-
-Results are saved to `results/Final_Supervised_Performance.xlsx`.
-
----
-
-## Results Summary
-
-| Rank | Combination | Precision | Recall | F1-Score | Accuracy |
-|------|-------------|-----------|--------|----------|----------|
-| 1 | USE – Lemma – SVM | 0.716 | 0.743 | 0.716 | 0.743 |
-| 2 | USE – English – SVM | 0.714 | 0.739 | 0.713 | 0.739 |
-| 3 | USE – Stem – SVM | 0.704 | 0.731 | 0.700 | 0.731 |
-| 4 | RoBERTa – Lemma – LR | 0.692 | 0.714 | 0.700 | 0.714 |
-| 5 | ALBERT – English – LR | 0.693 | 0.714 | 0.698 | 0.714 |
-
----
-
-## Citation
-
-If you use this code, please cite:
-
-```bibtex
-@article{kotan2026edms,
-  title   = {Enhancement of Document Routing Procedures in Electronic Document 
-             Management Systems Through Natural Language Processing and 
-             Machine Learning Algorithms},
-  author  = {Kotan, Kurban and K{\i}r{\i}{\c{s}}o{\u{g}}lu, Serdar},
-  journal = {Applied Soft Computing},
-  year    = {2026},
-  note    = {Under review}
-}
-```
-
----
-
-## License
-
-Code: MIT License  
-Dataset: Available upon request (subject to institutional ethics conditions)
-
----
-
-## Contact
-
-**Kurban KOTAN** — `kurban.kotan@cbu.edu.tr`  
-Department of Artificial Intelligence and Machine Learning  
-Manisa Celal Bayar University, Turkey  
-ORCID: [0000-0002-6660-0565](https://orcid.org/0000-0002-6660-0565)
+Claude Haiku 5.5 / Sonnet 5.5, GPT-6 Luna and Gemini 3.8 Flash were queried in November 2026 with extended reasoning
+switched off (Gemini: thinking budget 0, temperature 0; GPT-6 Luna: reasoning effort `none`, strict JSON schema;
+Claude: thinking `disabled`, or `between_tools` for Sonnet 5.5, which rejects `disabled`), 300 output tokens and
+de-identified text. Every response is stored in `results/llm/<model>__<mode>__<split>.jsonl` with its token counts and
+effective setting; re-requested answers are appended with `"pass": 2`, and the last record of a document is its answer.

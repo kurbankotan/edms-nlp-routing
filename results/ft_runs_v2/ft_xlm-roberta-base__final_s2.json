@@ -1,0 +1,29 @@
+{
+  "representation": "ft_xlm-roberta-base",
+  "family": "FT_s2",
+  "params": "{\"lr\": 5e-05, \"epochs\": 6, \"seed\": 2, \"max_len\": 256, \"batch\": 32, \"precision\": \"float16\"}",
+  "accuracy": 0.677555958862674,
+  "macro_f1": 0.4943065078164071,
+  "weighted_f1": 0.6756905624594841,
+  "balanced_accuracy": 0.47732208010925753,
+  "macro_precision": 0.5498375215096976,
+  "macro_recall": 0.47732208010925753,
+  "department_accuracy": 0.8880822746521476,
+  "top2_accuracy": 0.7961282516636419,
+  "top3_accuracy": 0.8644888082274652,
+  "lenient_accuracy": 0.6963097398669087,
+  "accuracy_ci": [
+    0.6551724137931034,
+    0.6993345432546885
+  ],
+  "macro_f1_ci": [
+    0.46077273688392595,
+    0.5250068048944553
+  ],
+  "fit_seconds_trainval": 346.50287675857544,
+  "predict_ms_per_doc": 1.3077156657676443,
+  "n_features": 0,
+  "checkpoint": "xlm-roberta-base",
+  "model_family": "fine-tuned encoder",
+  "device": "Tesla T4"
+}

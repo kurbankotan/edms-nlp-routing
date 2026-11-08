@@ -1,0 +1,29 @@
+{
+  "representation": "ft_bert-base-turkish-cased",
+  "family": "FT_s2",
+  "params": "{\"lr\": 5e-05, \"epochs\": 6, \"seed\": 2, \"max_len\": 256, \"batch\": 32, \"precision\": \"float16\"}",
+  "accuracy": 0.7071990320629159,
+  "macro_f1": 0.5314349058261096,
+  "weighted_f1": 0.7084472896707708,
+  "balanced_accuracy": 0.5226399461020234,
+  "macro_precision": 0.5790119886345088,
+  "macro_recall": 0.5226399461020234,
+  "department_accuracy": 0.911070780399274,
+  "top2_accuracy": 0.8578342407743497,
+  "top3_accuracy": 0.9068360556563824,
+  "lenient_accuracy": 0.7283726557773744,
+  "accuracy_ci": [
+    0.6854204476709014,
+    0.7289776164549304
+  ],
+  "macro_f1_ci": [
+    0.49753305872754866,
+    0.5615286910272201
+  ],
+  "fit_seconds_trainval": 219.0744698047638,
+  "predict_ms_per_doc": 1.189971936520705,
+  "n_features": 0,
+  "checkpoint": "dbmdz/bert-base-turkish-cased",
+  "model_family": "fine-tuned encoder",
+  "device": "Tesla T4"
+}

@@ -1,0 +1,151 @@
+{
+  "spearman_test_vs_cv_accuracy": {
+    "rho": 0.933952528379773,
+    "p": 1.478148230861364e-08,
+    "n": 18
+  },
+  "spearman_val_vs_test_macro_f1": {
+    "rho": 0.7041219649915303,
+    "p": 0.00025478816014572745,
+    "n": 22
+  },
+  "cv_minus_test_accuracy_points": {
+    "min": 1.6133128700289379,
+    "max": 5.92063409428728,
+    "median": 4.553911482104855
+  },
+  "knn10_vote": {
+    "test_accuracy": 0.6654567453115547,
+    "test_macro_f1": 0.4853178324395516,
+    "val_accuracy": 0.6460759493670886,
+    "val_macro_f1": 0.4486273246041396
+  },
+  "cascade": {
+    "Cascade BERTurk -> Gemini": {
+      "llm_share": 0.26,
+      "test_accuracy": 0.7404718693284936,
+      "test_macro_f1": 0.6188777484368555,
+      "llm_usd_per_1000_docs_alone": 1.8704913793103448,
+      "llm_usd_per_1000_docs_cascade": 0.48632775862068967
+    },
+    "Cascade BERTurk -> Sonnet": {
+      "llm_share": 0.28,
+      "test_accuracy": 0.736237144585602,
+      "test_macro_f1": 0.5656173020028248,
+      "llm_usd_per_1000_docs_alone": 9.137551119177251,
+      "llm_usd_per_1000_docs_cascade": 2.5585143133696304
+    }
+  },
+  "mcnemar_extra": [
+    {
+      "system_a": "Sonnet RAG",
+      "system_b": "Gemini RAG",
+      "acc_a": 0.7289776164549304,
+      "acc_b": 0.7344222625529341,
+      "n_a_only": 40,
+      "n_b_only": 49,
+      "statistic": 40.0,
+      "p_value": 0.39657015814551616,
+      "p_holm": 0.39657015814551616
+    },
+    {
+      "system_a": "Gemini RAG",
+      "system_b": "GPT RAG",
+      "acc_a": 0.7344222625529341,
+      "acc_b": 0.720508166969147,
+      "n_a_only": 55,
+      "n_b_only": 32,
+      "statistic": 32.0,
+      "p_value": 0.017827552929735955,
+      "p_holm": 0.07131021171894382
+    },
+    {
+      "system_a": "Gemini RAG",
+      "system_b": "BERTurk fine-tuned",
+      "acc_a": 0.7344222625529341,
+      "acc_b": 0.7102238354506957,
+      "n_a_only": 113,
+      "n_b_only": 73,
+      "statistic": 73.0,
+      "p_value": 0.004118244470934725,
+      "p_holm": 0.020591222354673627
+    },
+    {
+      "system_a": "BERTurk fine-tuned",
+      "system_b": "Qwen3-Embedding-4B / RBF-SVM",
+      "acc_a": 0.7102238354506957,
+      "acc_b": 0.7277676950998185,
+      "n_a_only": 90,
+      "n_b_only": 119,
+      "statistic": 90.0,
+      "p_value": 0.05250921824499137,
+      "p_holm": 0.1575276547349741
+    },
+    {
+      "system_a": "Qwen3-Embedding-4B / RBF-SVM",
+      "system_b": "TF-IDF stem / LinearSVM",
+      "acc_a": 0.7277676950998185,
+      "acc_b": 0.6836055656382335,
+      "n_a_only": 159,
+      "n_b_only": 86,
+      "statistic": 86.0,
+      "p_value": 3.613078626368621e-06,
+      "p_holm": 2.5291550384580348e-05
+    },
+    {
+      "system_a": "Gemini RAG",
+      "system_b": "kNN-10 vote",
+      "acc_a": 0.7344222625529341,
+      "acc_b": 0.6654567453115547,
+      "n_a_only": 181,
+      "n_b_only": 67,
+      "statistic": 67.0,
+      "p_value": 2.722383225531809e-13,
+      "p_holm": 2.553857942056478e-12
+    },
+    {
+      "system_a": "Sonnet RAG",
+      "system_b": "kNN-10 vote",
+      "acc_a": 0.7289776164549304,
+      "acc_b": 0.6654567453115547,
+      "n_a_only": 158,
+      "n_b_only": 53,
+      "statistic": 53.0,
+      "p_value": 2.553857942056478e-13,
+      "p_holm": 2.553857942056478e-12
+    },
+    {
+      "system_a": "Cascade BERTurk -> Gemini",
+      "system_b": "BERTurk fine-tuned",
+      "acc_a": 0.7404718693284936,
+      "acc_b": 0.7102238354506957,
+      "n_a_only": 94,
+      "n_b_only": 44,
+      "statistic": 44.0,
+      "p_value": 2.5036308978341128e-05,
+      "p_holm": 0.00015021785387004676
+    },
+    {
+      "system_a": "Cascade BERTurk -> Gemini",
+      "system_b": "Gemini RAG",
+      "acc_a": 0.7404718693284936,
+      "acc_b": 0.7344222625529341,
+      "n_a_only": 29,
+      "n_b_only": 19,
+      "statistic": 19.0,
+      "p_value": 0.19341265286193737,
+      "p_holm": 0.38682530572387475
+    },
+    {
+      "system_a": "TF-IDF body (TR)",
+      "system_b": "TF-IDF body (EN, translated)",
+      "acc_a": 0.6448880822746521,
+      "acc_b": 0.5970961887477314,
+      "n_a_only": 157,
+      "n_b_only": 78,
+      "statistic": 78.0,
+      "p_value": 2.822010503618358e-07,
+      "p_holm": 2.2576084028946866e-06
+    }
+  ]
+}

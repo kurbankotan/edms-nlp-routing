@@ -1,0 +1,13 @@
+true -> predicted,count
+Software -> BİDB (dept.),48
+Rectorate -> Software,32
+Internet Services -> Software,31
+SKS (dept.) -> Social Facilities,21
+Software -> Internet Services,20
+SKS (dept.) -> Cultural Services,20
+IT Services -> Software,19
+Cultural Services -> SKS (dept.),17
+BİDB (dept.) -> Software,15
+SKS (dept.) -> BİDB (dept.),14
+SKS (dept.) -> Software,11
+Internet Services -> IT Services,11

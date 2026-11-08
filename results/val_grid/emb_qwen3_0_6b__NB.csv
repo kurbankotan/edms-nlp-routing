@@ -1,0 +1,2 @@
+family,kind,accuracy,macro_f1,weighted_f1,balanced_accuracy,macro_precision,macro_recall,department_accuracy,fit_seconds
+NB,GaussianNB,0.509873417721519,0.38504081591776834,0.5376445685804467,0.42618066501430374,0.4020007152717003,0.42618066501430374,0.8,0.03787517547607422

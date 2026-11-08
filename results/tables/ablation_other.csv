@@ -1,0 +1,5 @@
+system,representation,accuracy,macro_f1,weighted_f1,top3_accuracy,cv_accuracy_mean,cv_accuracy_sd
+multilingual-e5-base + sender unit / RBF-SVM,emb_e5_base+sender,0.764065335753176,0.5846054336825124,0.7577269891155453,0.9249848759830612,0.7996785121985607,0.0133196475249504
+"all-mpnet-base-v2 (EN, translated) [content only, EN translated] / RBF-SVM",emb_mpnet_en__content_en_clean,0.6297640653357531,0.4458920515379326,0.627282717546853,0.8300060496067756,0.6480230768797819,0.0197959057434059
+paraphrase-multilingual-mpnet-base + sender unit / RBF-SVM,emb_mpnet_multi+sender,0.7374470659407139,0.5545682268072861,0.7313575924168618,0.9159104658197216,0.774301244788182,0.0167829304556074
+"paraphrase-multilingual-mpnet-base [content only, TR] / RBF-SVM",emb_mpnet_multi__content_clean,0.6297640653357531,0.4752914253568759,0.640752511834355,0.8415003024803388,0.6661989408038156,0.0182270537565134

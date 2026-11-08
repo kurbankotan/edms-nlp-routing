@@ -1,0 +1,25 @@
+local_system,llm,rule,llm_share,test_accuracy,local_alone,llm_alone
+BERTurk fine-tuned / mean of 3 seeds,llm_claude-haiku-5-5__rag10,min share within 1pt of LLM,0.0,0.7102238354506957,0.7102238354506957,0.6932849364791288
+BERTurk fine-tuned / mean of 3 seeds,llm_claude-haiku-5-5__rag10,best val accuracy,0.11,0.7180883242589232,0.7102238354506957,0.6932849364791288
+BERTurk fine-tuned / mean of 3 seeds,llm_claude-sonnet-5-5__rag10,min share within 1pt of LLM,0.04,0.7150635208711433,0.7102238354506957,0.7289776164549304
+BERTurk fine-tuned / mean of 3 seeds,llm_claude-sonnet-5-5__rag10,best val accuracy,0.28,0.736237144585602,0.7102238354506957,0.7289776164549304
+BERTurk fine-tuned / mean of 3 seeds,llm_gemini-3.8-flash__rag10,min share within 1pt of LLM,0.0,0.7102238354506957,0.7102238354506957,0.7344222625529341
+BERTurk fine-tuned / mean of 3 seeds,llm_gemini-3.8-flash__rag10,best val accuracy,0.26,0.7404718693284936,0.7102238354506957,0.7344222625529341
+BERTurk fine-tuned / mean of 3 seeds,llm_gpt-6-luna__rag10,min share within 1pt of LLM,0.0,0.7102238354506957,0.7102238354506957,0.720508166969147
+BERTurk fine-tuned / mean of 3 seeds,llm_gpt-6-luna__rag10,best val accuracy,0.11,0.7180883242589232,0.7102238354506957,0.720508166969147
+paraphrase-multilingual-MiniLM-L12 / KNN,llm_claude-haiku-5-5__rag10,min share within 1pt of LLM,0.42,0.6842105263157895,0.6527525710828797,0.6932849364791288
+paraphrase-multilingual-MiniLM-L12 / KNN,llm_claude-haiku-5-5__rag10,best val accuracy,0.84,0.6842105263157895,0.6527525710828797,0.6932849364791288
+paraphrase-multilingual-MiniLM-L12 / KNN,llm_claude-sonnet-5-5__rag10,min share within 1pt of LLM,0.73,0.7174833635813672,0.6527525710828797,0.7289776164549304
+paraphrase-multilingual-MiniLM-L12 / KNN,llm_claude-sonnet-5-5__rag10,best val accuracy,1.0,0.7289776164549304,0.6527525710828797,0.7289776164549304
+paraphrase-multilingual-MiniLM-L12 / KNN,llm_gemini-3.8-flash__rag10,min share within 1pt of LLM,0.72,0.7235329703569268,0.6527525710828797,0.7344222625529341
+paraphrase-multilingual-MiniLM-L12 / KNN,llm_gemini-3.8-flash__rag10,best val accuracy,1.0,0.7344222625529341,0.6527525710828797,0.7344222625529341
+paraphrase-multilingual-MiniLM-L12 / KNN,llm_gpt-6-luna__rag10,min share within 1pt of LLM,0.63,0.7078039927404719,0.6527525710828797,0.720508166969147
+paraphrase-multilingual-MiniLM-L12 / KNN,llm_gpt-6-luna__rag10,best val accuracy,0.9500000000000001,0.7186932849364791,0.6527525710828797,0.720508166969147
+TF-IDF word (stem) / LinearSVM,llm_claude-haiku-5-5__rag10,min share within 1pt of LLM,0.03,0.6854204476709014,0.6836055656382335,0.6932849364791288
+TF-IDF word (stem) / LinearSVM,llm_claude-haiku-5-5__rag10,best val accuracy,0.28,0.6987295825771325,0.6836055656382335,0.6932849364791288
+TF-IDF word (stem) / LinearSVM,llm_claude-sonnet-5-5__rag10,min share within 1pt of LLM,0.23,0.7047791893526921,0.6836055656382335,0.7289776164549304
+TF-IDF word (stem) / LinearSVM,llm_claude-sonnet-5-5__rag10,best val accuracy,0.56,0.7259528130671506,0.6836055656382335,0.7289776164549304
+TF-IDF word (stem) / LinearSVM,llm_gemini-3.8-flash__rag10,min share within 1pt of LLM,0.2,0.7017543859649122,0.6836055656382335,0.7344222625529341
+TF-IDF word (stem) / LinearSVM,llm_gemini-3.8-flash__rag10,best val accuracy,0.4,0.7295825771324864,0.6836055656382335,0.7344222625529341
+TF-IDF word (stem) / LinearSVM,llm_gpt-6-luna__rag10,min share within 1pt of LLM,0.19,0.6944948578342408,0.6836055656382335,0.720508166969147
+TF-IDF word (stem) / LinearSVM,llm_gpt-6-luna__rag10,best val accuracy,0.4,0.7186932849364791,0.6836055656382335,0.720508166969147
