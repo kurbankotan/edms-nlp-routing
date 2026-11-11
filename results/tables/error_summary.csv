@@ -1,2 +1,2 @@
 system,selected_on,n_test,n_errors,errors_within_department,errors_across_departments,department_accuracy
-Claude Sonnet 5.5 / RAG-10,validation macro-F1,1653,448,326,122,0.926194797338173
+Gemini 3.8 Flash / RAG-10,validation macro-F1,1653,441,293,148,0.9104658197217181

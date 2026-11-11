@@ -35,7 +35,7 @@ from common import PARENT, RESULTS, load_docs                        # noqa: E40
 
 TAB = RESULTS / "tables"
 SYSTEMS = {"BERTurk fine-tuned": ("ft_bert-base-turkish-cased__FT_s0", "prob"),
-           "TF-IDF (stem) + linear SVM": ("tfidf_word_stem__LinearSVM", "margin")}
+           "TF-IDF (lemma) + linear SVM": ("tfidf_word_lemma__LinearSVM", "margin")}     # lexical family representative (validation)
 DEPTS = ["BİDB", "SKS", "Rektörlük"]
 OFFICES = ["Bilgi İşlem Daire Başkanlığı", "Sağlık Kültür ve Spor Daire Başkanlığı", "Rektörlük"]   # office of each department
 TARGETS = (0.90, 0.95)
@@ -175,7 +175,7 @@ def main():
     for j, (col, lab_) in enumerate(((C["blue"], "unit (automatic)"), (C["orange"], "department office (back-off)"), (C["violet"], "staff"))):
         ax2.barh(ylab, vals[:, j] * 100, left=left, color=col, edgecolor="white", linewidth=1.2, height=0.62, label=lab_)
         for i, v in enumerate(vals[:, j]):
-            if v >= 0.07:
+            if v >= 0.05:
                 ax2.text(left[i] + v * 50, i, f"{v*100:.0f}%", ha="center", va="center", fontsize=7, color="white", fontweight="bold")
         left += vals[:, j] * 100
     ax2.set_xlim(0, 100); ax2.set_xlabel("Share of test documents (%)")

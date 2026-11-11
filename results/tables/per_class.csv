@@ -1,53 +1,53 @@
 system,unit,precision,recall,f1,support,train_support
-Claude Sonnet 5.5 / RAG-10,Beslenme Hizmetleri Şube Müdürlüğü,0.8545454545454545,0.7121212121212122,0.7768595041322314,66,219
-Claude Sonnet 5.5 / RAG-10,Bilgi İşlem Daire Başkanlığı,0.23232323232323232,0.39655172413793105,0.2929936305732484,58,292
-Claude Sonnet 5.5 / RAG-10,Bilgi İşlem Şube Müdürlüğü,0.5,0.4057971014492754,0.448,69,171
-Claude Sonnet 5.5 / RAG-10,Haberleşme Hizmetleri Şube Müdürlüğü,0.5263157894736842,0.6666666666666666,0.5882352941176471,15,25
-Claude Sonnet 5.5 / RAG-10,Kültür Hizmetleri Şube Müdürlüğü,0.7837837837837838,0.7754010695187166,0.7795698924731183,187,529
-Claude Sonnet 5.5 / RAG-10,Rektörlük,0.7317073170731707,0.44776119402985076,0.5555555555555556,67,113
-Claude Sonnet 5.5 / RAG-10,Satın Alma Şube Müdürlüğü,0.8414634146341463,0.8961038961038961,0.8679245283018868,154,702
-Claude Sonnet 5.5 / RAG-10,Sağlık Hizmetleri Şube Müdürlüğü,0.0,0.0,0.0,1,6
-Claude Sonnet 5.5 / RAG-10,Sağlık Kültür ve Spor Daire Başkanlığı,0.49411764705882355,0.34146341463414637,0.40384615384615385,123,413
-Claude Sonnet 5.5 / RAG-10,Sosyal Tesisler Şube Müdürlüğü,0.6144578313253012,0.7846153846153846,0.6891891891891891,65,218
-Claude Sonnet 5.5 / RAG-10,Spor Tesisleri Şube Müdürlüğü,0.8103448275862069,0.6103896103896104,0.6962962962962963,77,185
-Claude Sonnet 5.5 / RAG-10,Yazılım Şube Müdürlüğü,0.834924965893588,0.8947368421052632,0.8637967537050106,684,2664
-Claude Sonnet 5.5 / RAG-10,İnternet Hizmetleri Şube Müdürlüğü,0.4383561643835616,0.367816091954023,0.4,87,180
-BERTurk fine-tuned / mean of 3 seeds,Beslenme Hizmetleri Şube Müdürlüğü,0.8620689655172413,0.7575757575757576,0.8064516129032258,66,219
-BERTurk fine-tuned / mean of 3 seeds,Bilgi İşlem Daire Başkanlığı,0.2972972972972973,0.1896551724137931,0.23157894736842105,58,292
-BERTurk fine-tuned / mean of 3 seeds,Bilgi İşlem Şube Müdürlüğü,0.43661971830985913,0.4492753623188406,0.44285714285714284,69,171
-BERTurk fine-tuned / mean of 3 seeds,Haberleşme Hizmetleri Şube Müdürlüğü,0.5333333333333333,0.5333333333333333,0.5333333333333333,15,25
-BERTurk fine-tuned / mean of 3 seeds,Kültür Hizmetleri Şube Müdürlüğü,0.7574257425742574,0.8181818181818182,0.7866323907455013,187,529
-BERTurk fine-tuned / mean of 3 seeds,Rektörlük,0.8387096774193549,0.3880597014925373,0.5306122448979592,67,113
-BERTurk fine-tuned / mean of 3 seeds,Satın Alma Şube Müdürlüğü,0.7263157894736842,0.8961038961038961,0.8023255813953488,154,702
+Gemini 3.8 Flash / RAG-10,Beslenme Hizmetleri Şube Müdürlüğü,0.8888888888888888,0.7272727272727273,0.8,66,219
+Gemini 3.8 Flash / RAG-10,Bilgi İşlem Daire Başkanlığı,0.24285714285714285,0.29310344827586204,0.265625,58,292
+Gemini 3.8 Flash / RAG-10,Bilgi İşlem Şube Müdürlüğü,0.5294117647058824,0.391304347826087,0.45,69,171
+Gemini 3.8 Flash / RAG-10,Haberleşme Hizmetleri Şube Müdürlüğü,0.5217391304347826,0.8,0.631578947368421,15,25
+Gemini 3.8 Flash / RAG-10,Kültür Hizmetleri Şube Müdürlüğü,0.8305084745762712,0.786096256684492,0.8076923076923077,187,529
+Gemini 3.8 Flash / RAG-10,Rektörlük,0.5344827586206896,0.4626865671641791,0.496,67,113
+Gemini 3.8 Flash / RAG-10,Satın Alma Şube Müdürlüğü,0.8253012048192772,0.8896103896103896,0.85625,154,702
+Gemini 3.8 Flash / RAG-10,Sağlık Hizmetleri Şube Müdürlüğü,0.25,1.0,0.4,1,6
+Gemini 3.8 Flash / RAG-10,Sağlık Kültür ve Spor Daire Başkanlığı,0.42727272727272725,0.3821138211382114,0.4034334763948498,123,413
+Gemini 3.8 Flash / RAG-10,Sosyal Tesisler Şube Müdürlüğü,0.6091954022988506,0.8153846153846154,0.6973684210526315,65,218
+Gemini 3.8 Flash / RAG-10,Spor Tesisleri Şube Müdürlüğü,0.819672131147541,0.6493506493506493,0.7246376811594203,77,185
+Gemini 3.8 Flash / RAG-10,Yazılım Şube Müdürlüğü,0.8441379310344828,0.8947368421052632,0.8687012065294535,684,2664
+Gemini 3.8 Flash / RAG-10,İnternet Hizmetleri Şube Müdürlüğü,0.44776119402985076,0.3448275862068966,0.38961038961038963,87,180
+BERTurk fine-tuned / mean of 3 seeds,Beslenme Hizmetleri Şube Müdürlüğü,0.8032786885245902,0.7424242424242424,0.7716535433070866,66,219
+BERTurk fine-tuned / mean of 3 seeds,Bilgi İşlem Daire Başkanlığı,0.21348314606741572,0.3275862068965517,0.2585034013605442,58,292
+BERTurk fine-tuned / mean of 3 seeds,Bilgi İşlem Şube Müdürlüğü,0.410958904109589,0.43478260869565216,0.4225352112676056,69,171
+BERTurk fine-tuned / mean of 3 seeds,Haberleşme Hizmetleri Şube Müdürlüğü,0.6666666666666666,0.26666666666666666,0.38095238095238093,15,25
+BERTurk fine-tuned / mean of 3 seeds,Kültür Hizmetleri Şube Müdürlüğü,0.7247706422018348,0.8449197860962567,0.7802469135802469,187,529
+BERTurk fine-tuned / mean of 3 seeds,Rektörlük,0.6842105263157895,0.3880597014925373,0.49523809523809526,67,113
+BERTurk fine-tuned / mean of 3 seeds,Satın Alma Şube Müdürlüğü,0.7987804878048781,0.8506493506493507,0.8238993710691824,154,702
 BERTurk fine-tuned / mean of 3 seeds,Sağlık Hizmetleri Şube Müdürlüğü,0.0,0.0,0.0,1,6
-BERTurk fine-tuned / mean of 3 seeds,Sağlık Kültür ve Spor Daire Başkanlığı,0.42424242424242425,0.45528455284552843,0.4392156862745098,123,413
-BERTurk fine-tuned / mean of 3 seeds,Sosyal Tesisler Şube Müdürlüğü,0.5542168674698795,0.7076923076923077,0.6216216216216216,65,218
-BERTurk fine-tuned / mean of 3 seeds,Spor Tesisleri Şube Müdürlüğü,0.8103448275862069,0.6103896103896104,0.6962962962962963,77,185
-BERTurk fine-tuned / mean of 3 seeds,Yazılım Şube Müdürlüğü,0.8444767441860465,0.8494152046783626,0.8469387755102041,684,2664
-BERTurk fine-tuned / mean of 3 seeds,İnternet Hizmetleri Şube Müdürlüğü,0.3068181818181818,0.3103448275862069,0.30857142857142855,87,180
-paraphrase-multilingual-MiniLM-L12 / KNN,Beslenme Hizmetleri Şube Müdürlüğü,0.47435897435897434,0.5606060606060606,0.5138888888888888,66,219
-paraphrase-multilingual-MiniLM-L12 / KNN,Bilgi İşlem Daire Başkanlığı,0.208955223880597,0.2413793103448276,0.224,58,292
-paraphrase-multilingual-MiniLM-L12 / KNN,Bilgi İşlem Şube Müdürlüğü,0.42857142857142855,0.2608695652173913,0.32432432432432434,69,171
-paraphrase-multilingual-MiniLM-L12 / KNN,Haberleşme Hizmetleri Şube Müdürlüğü,0.47058823529411764,0.5333333333333333,0.5,15,25
-paraphrase-multilingual-MiniLM-L12 / KNN,Kültür Hizmetleri Şube Müdürlüğü,0.625,0.6684491978609626,0.6459948320413437,187,529
-paraphrase-multilingual-MiniLM-L12 / KNN,Rektörlük,0.7567567567567568,0.417910447761194,0.5384615384615384,67,113
-paraphrase-multilingual-MiniLM-L12 / KNN,Satın Alma Şube Müdürlüğü,0.712707182320442,0.8376623376623377,0.7701492537313432,154,702
-paraphrase-multilingual-MiniLM-L12 / KNN,Sağlık Hizmetleri Şube Müdürlüğü,0.0,0.0,0.0,1,6
-paraphrase-multilingual-MiniLM-L12 / KNN,Sağlık Kültür ve Spor Daire Başkanlığı,0.4215686274509804,0.34959349593495936,0.38222222222222224,123,413
-paraphrase-multilingual-MiniLM-L12 / KNN,Sosyal Tesisler Şube Müdürlüğü,0.3875,0.47692307692307695,0.42758620689655175,65,218
-paraphrase-multilingual-MiniLM-L12 / KNN,Spor Tesisleri Şube Müdürlüğü,0.6440677966101694,0.4935064935064935,0.5588235294117647,77,185
-paraphrase-multilingual-MiniLM-L12 / KNN,Yazılım Şube Müdürlüğü,0.785809906291834,0.8581871345029239,0.8204053109713487,684,2664
-paraphrase-multilingual-MiniLM-L12 / KNN,İnternet Hizmetleri Şube Müdürlüğü,0.4883720930232558,0.2413793103448276,0.3230769230769231,87,180
-TF-IDF word (stem) / LinearSVM,Beslenme Hizmetleri Şube Müdürlüğü,0.7580645161290323,0.7121212121212122,0.734375,66,219
-TF-IDF word (stem) / LinearSVM,Bilgi İşlem Daire Başkanlığı,0.18518518518518517,0.3448275862068966,0.24096385542168675,58,292
-TF-IDF word (stem) / LinearSVM,Bilgi İşlem Şube Müdürlüğü,0.379746835443038,0.43478260869565216,0.40540540540540543,69,171
-TF-IDF word (stem) / LinearSVM,Haberleşme Hizmetleri Şube Müdürlüğü,0.5714285714285714,0.26666666666666666,0.36363636363636365,15,25
-TF-IDF word (stem) / LinearSVM,Kültür Hizmetleri Şube Müdürlüğü,0.6796536796536796,0.839572192513369,0.7511961722488039,187,529
-TF-IDF word (stem) / LinearSVM,Rektörlük,0.6341463414634146,0.3880597014925373,0.48148148148148145,67,113
-TF-IDF word (stem) / LinearSVM,Satın Alma Şube Müdürlüğü,0.8164556962025317,0.8376623376623377,0.8269230769230769,154,702
-TF-IDF word (stem) / LinearSVM,Sağlık Hizmetleri Şube Müdürlüğü,0.0,0.0,0.0,1,6
-TF-IDF word (stem) / LinearSVM,Sağlık Kültür ve Spor Daire Başkanlığı,0.5375,0.34959349593495936,0.4236453201970443,123,413
-TF-IDF word (stem) / LinearSVM,Sosyal Tesisler Şube Müdürlüğü,0.4842105263157895,0.7076923076923077,0.575,65,218
-TF-IDF word (stem) / LinearSVM,Spor Tesisleri Şube Müdürlüğü,0.8,0.5714285714285714,0.6666666666666666,77,185
-TF-IDF word (stem) / LinearSVM,Yazılım Şube Müdürlüğü,0.8452012383900929,0.7982456140350878,0.8210526315789474,684,2664
-TF-IDF word (stem) / LinearSVM,İnternet Hizmetleri Şube Müdürlüğü,0.4222222222222222,0.4367816091954023,0.4293785310734463,87,180
+BERTurk fine-tuned / mean of 3 seeds,Sağlık Kültür ve Spor Daire Başkanlığı,0.5517241379310345,0.3902439024390244,0.45714285714285713,123,413
+BERTurk fine-tuned / mean of 3 seeds,Sosyal Tesisler Şube Müdürlüğü,0.5,0.7076923076923077,0.5859872611464968,65,218
+BERTurk fine-tuned / mean of 3 seeds,Spor Tesisleri Şube Müdürlüğü,0.75,0.6233766233766234,0.6808510638297872,77,185
+BERTurk fine-tuned / mean of 3 seeds,Yazılım Şube Müdürlüğü,0.8449848024316109,0.8128654970760234,0.8286140089418778,684,2664
+BERTurk fine-tuned / mean of 3 seeds,İnternet Hizmetleri Şube Müdürlüğü,0.34951456310679613,0.41379310344827586,0.37894736842105264,87,180
+multilingual-e5-large / RBF-SVM,Beslenme Hizmetleri Şube Müdürlüğü,0.8461538461538461,0.6666666666666666,0.7457627118644068,66,219
+multilingual-e5-large / RBF-SVM,Bilgi İşlem Daire Başkanlığı,0.1592356687898089,0.43103448275862066,0.23255813953488372,58,292
+multilingual-e5-large / RBF-SVM,Bilgi İşlem Şube Müdürlüğü,0.3894736842105263,0.5362318840579711,0.45121951219512196,69,171
+multilingual-e5-large / RBF-SVM,Haberleşme Hizmetleri Şube Müdürlüğü,0.8333333333333334,0.3333333333333333,0.47619047619047616,15,25
+multilingual-e5-large / RBF-SVM,Kültür Hizmetleri Şube Müdürlüğü,0.649402390438247,0.8716577540106952,0.7442922374429224,187,529
+multilingual-e5-large / RBF-SVM,Rektörlük,0.5084745762711864,0.44776119402985076,0.47619047619047616,67,113
+multilingual-e5-large / RBF-SVM,Satın Alma Şube Müdürlüğü,0.8807947019867549,0.8636363636363636,0.8721311475409836,154,702
+multilingual-e5-large / RBF-SVM,Sağlık Hizmetleri Şube Müdürlüğü,0.0,0.0,0.0,1,6
+multilingual-e5-large / RBF-SVM,Sağlık Kültür ve Spor Daire Başkanlığı,0.5212765957446809,0.3983739837398374,0.45161290322580644,123,413
+multilingual-e5-large / RBF-SVM,Sosyal Tesisler Şube Müdürlüğü,0.4725274725274725,0.6615384615384615,0.5512820512820513,65,218
+multilingual-e5-large / RBF-SVM,Spor Tesisleri Şube Müdürlüğü,0.7758620689655172,0.5844155844155844,0.6666666666666666,77,185
+multilingual-e5-large / RBF-SVM,Yazılım Şube Müdürlüğü,0.8940520446096655,0.7032163742690059,0.7872340425531915,684,2664
+multilingual-e5-large / RBF-SVM,İnternet Hizmetleri Şube Müdürlüğü,0.41,0.47126436781609193,0.4385026737967914,87,180
+TF-IDF word (lemma) / LinearSVM,Beslenme Hizmetleri Şube Müdürlüğü,0.7538461538461538,0.7424242424242424,0.7480916030534351,66,219
+TF-IDF word (lemma) / LinearSVM,Bilgi İşlem Daire Başkanlığı,0.18269230769230768,0.3275862068965517,0.2345679012345679,58,292
+TF-IDF word (lemma) / LinearSVM,Bilgi İşlem Şube Müdürlüğü,0.410958904109589,0.43478260869565216,0.4225352112676056,69,171
+TF-IDF word (lemma) / LinearSVM,Haberleşme Hizmetleri Şube Müdürlüğü,0.625,0.3333333333333333,0.43478260869565216,15,25
+TF-IDF word (lemma) / LinearSVM,Kültür Hizmetleri Şube Müdürlüğü,0.6964285714285714,0.8342245989304813,0.7591240875912408,187,529
+TF-IDF word (lemma) / LinearSVM,Rektörlük,0.896551724137931,0.3880597014925373,0.5416666666666666,67,113
+TF-IDF word (lemma) / LinearSVM,Satın Alma Şube Müdürlüğü,0.7724550898203593,0.8376623376623377,0.8037383177570093,154,702
+TF-IDF word (lemma) / LinearSVM,Sağlık Hizmetleri Şube Müdürlüğü,0.0,0.0,0.0,1,6
+TF-IDF word (lemma) / LinearSVM,Sağlık Kültür ve Spor Daire Başkanlığı,0.589041095890411,0.34959349593495936,0.4387755102040816,123,413
+TF-IDF word (lemma) / LinearSVM,Sosyal Tesisler Şube Müdürlüğü,0.4803921568627451,0.7538461538461538,0.5868263473053892,65,218
+TF-IDF word (lemma) / LinearSVM,Spor Tesisleri Şube Müdürlüğü,0.7741935483870968,0.6233766233766234,0.6906474820143885,77,185
+TF-IDF word (lemma) / LinearSVM,Yazılım Şube Müdürlüğü,0.8534351145038168,0.8172514619883041,0.8349514563106796,684,2664
+TF-IDF word (lemma) / LinearSVM,İnternet Hizmetleri Şube Müdürlüğü,0.4,0.41379310344827586,0.4067796610169492,87,180

@@ -427,13 +427,18 @@ def fig_confusion(labels, pred, title):
     ax.set_xticks(range(len(order))); ax.set_xticklabels(names, rotation=45, ha="right", fontsize=7.5)
     ax.set_yticks(range(len(order))); ax.set_yticklabels([f"{n} ({cm[i].sum()})" for i, n in enumerate(names)], fontsize=7.5)
     ax.set_xlabel("Predicted unit"); ax.set_ylabel("True unit (test support)")
-    # department bands
+    # department bands: frames on the diagonal, names in a bracket to the right of the matrix (outside the cells)
     deps = [PARENT[u] for u in order]; start = 0
+    dep_name = {"BİDB": "BİDB", "SKS": "SKS", "Rektörlük": "Rectorate"}
+    x_br = len(order) - 0.5 + 0.25
     for k in range(1, len(order) + 1):
         if k == len(order) or deps[k] != deps[start]:
             ax.add_patch(plt.Rectangle((start - 0.5, start - 0.5), k - start, k - start, fill=False, ec=C["orange"], lw=1.2))
-            ax.text(k - 0.45, start - 0.45, deps[start], ha="right", va="top", fontsize=7, color=C["orange"], fontweight="bold")
+            ax.plot([x_br, x_br], [start - 0.4, k - 0.6], color=C["orange"], lw=1.2, clip_on=False, solid_capstyle="butt")
+            ax.text(x_br + 0.2, (start + k - 1) / 2, dep_name.get(deps[start], deps[start]), ha="left", va="center", fontsize=7,
+                    color=C["orange"], fontweight="bold", clip_on=False)
             start = k
+    ax.set_xlim(-0.5, len(order) - 0.5); ax.set_ylim(len(order) - 0.5, -0.5)
     ax.set_title(title, fontsize=9)
     ax.spines[:].set_visible(False); ax.tick_params(length=0)
     save(fig, "fig_confusion")
@@ -443,13 +448,15 @@ def fig_perclass(tables, labels):
     pc = tables.get("per_class")
     if pc is None:
         return
-    systems = list(dict.fromkeys(pc["system"]))[:3]
+    systems = list(dict.fromkeys(pc["system"]))[:4]
     fig, ax = plt.subplots(figsize=(7.5, 3.8))
-    cols = [C["blue"], C["orange"], C["aqua"]]
-    for (s, col), off in zip(zip(systems, cols), (-0.25, 0, 0.25)):
+    grp = dict(zip(tables["representatives"]["system"], tables["representatives"]["group"])) if "representatives" in tables else {}
+    cols = [FAMILY_COLOR.get(grp.get(s_), c_) for s_, c_ in zip(systems, [C["blue"], C["orange"], C["aqua"], C["violet"]])]
+    w = 0.8 / len(systems); offs = [(i - (len(systems) - 1) / 2) * w for i in range(len(systems))]
+    for (s, col), off in zip(zip(systems, cols), offs):
         t = pc[pc["system"] == s].set_index("unit").loc[sorted(labels, key=lambda u: -pc[(pc.system == s) & (pc.unit == u)]["train_support"].iloc[0])]
         x = np.arange(len(t)) + off
-        ax.bar(x, t["f1"], width=0.25, color=col, label=s)
+        ax.bar(x, t["f1"], width=w, color=col, label=s.replace("mean of 3 seeds", "seed 0"))
     t0 = pc[pc["system"] == systems[0]].set_index("unit").loc[sorted(labels, key=lambda u: -pc[(pc.system == systems[0]) & (pc.unit == u)]["train_support"].iloc[0])]
     ax.set_xticks(range(len(t0))); ax.set_xticklabels([f"{SHORT[u]}\n(n={n})" for u, n in zip(t0.index, t0["train_support"])], fontsize=6.8, rotation=35, ha="right")
     ax.set_ylabel("F1 (test)"); ax.set_ylim(0, 1); ax.yaxis.grid(True, color=C["grid"], lw=0.6); ax.set_axisbelow(True)
@@ -528,23 +535,24 @@ digraph G {
   rankdir=TB; nodesep=0.3; ranksep=0.45; bgcolor="white"; newrank=true; compound=true;
   node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, color="#c3c2b7", penwidth=1, margin="0.12,0.06"];
   edge [color="#52514e", arrowsize=0.7, fontname="Helvetica", fontsize=9];
-  subgraph cluster_data { label="Data layer"; fontname="Helvetica-Bold"; fontsize=11; color="#e1e0d9"; style="rounded"; rank=same; labeljust="l";
-    raw [label="EDMS dispatch log\n33,828 records (2019-2022)", fillcolor="#eef4fc"];
-    doc [label="Document table\n9,345 documents, 13 units\n(first dispatch = label)", fillcolor="#eef4fc"];
-    split [label="Chronological partitions\ntrain / validation / test\n+ grouped 5x2 CV", fillcolor="#eef4fc"];
-    raw -> doc -> split; }
+  subgraph cluster_data { label="Data layer"; fontname="Helvetica-Bold"; fontsize=11; color="#e1e0d9"; style="rounded"; labeljust="l";
+    { rank=same; raw [label="EDMS dispatch log\n33,828 records (2020-2022)", fillcolor="#eef4fc"];
+      doc [label="Document table\n9,345 documents, 13 units\n(first dispatch = label)", fillcolor="#eef4fc"]; }
+    { rank=same; deid [label="De-identification\nnames, e-mail, phone, ID numbers\n-> placeholders (NER + patterns)", fillcolor="#eef4fc"];
+      split [label="Chronological partitions\ntrain / validation / test\n+ grouped 5x2 CV", fillcolor="#eef4fc"]; }
+    raw -> doc; doc -> deid; deid -> split; }
   subgraph cluster_rep { label="Representation layer"; fontname="Helvetica-Bold"; fontsize=11; color="#e1e0d9"; style="rounded"; rank=same; labeljust="l";
     lex [label="Lexical\nTF-IDF word / character n-grams\n(raw, stem, lemma)", fillcolor="#e8f6f0"];
     emb [label="Frozen sentence encoders\nmultilingual and Turkish", fillcolor="#e8f6f0"];
     ft  [label="Fine-tuned encoders\nBERTurk, XLM-R", fillcolor="#e8f6f0"];
   }
-  subgraph cluster_cls { label="Decision layer"; fontname="Helvetica-Bold"; fontsize=11; color="#e1e0d9"; style="rounded"; rank=same; labeljust="l";
+  subgraph cluster_cls { label="Decision layer"; fontname="Helvetica-Bold"; fontsize=11; color="#e1e0d9"; style="rounded"; rank=same; labeljust="r";
     clf [label="Classifier grid\nLR, SVM, KNN, RF, NB, DT\n(selected on validation)", fillcolor="#fdeee8"];
     conf [label="Ranked units + confidence\n(top-1 probability)", fillcolor="#fdeee8"];
   }
   subgraph cluster_route { label="Routing layer"; fontname="Helvetica-Bold"; fontsize=11; color="#e1e0d9"; style="rounded"; rank=same; labeljust="l";
     auto [label="Automatic routing\n(top-1; top-3 as suggestion)", fillcolor="#f3f0fb"];
-    llm [label="LLM second stage\n(retrieval-augmented,\nde-identified text)", fillcolor="#f3f0fb"];
+    llm [label="LLM second stage\n(retrieval-augmented,\nexternal API)", fillcolor="#f3f0fb"];
     human [label="Staff review\n(top-3 suggestion)", fillcolor="#f3f0fb"];
   }
   split -> lex; split -> emb; split -> ft;

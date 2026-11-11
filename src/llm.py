@@ -90,10 +90,11 @@ def _mask_patterns(t):
     return t
 
 
-def mask_texts(texts, device=None, words_per_chunk=120):
-    """Replace person names ([KİŞİ]), e-mails, phone and 11-digit numbers before API calls.
+def mask_texts(texts, device=None, words_per_chunk=120, return_names=False):
+    """Replace person names ([KİŞİ]), e-mails, phone and 11-digit numbers.
     Texts are cut into windows of `words_per_chunk` words (well below the 512-token limit of
-    the NER model); masked windows are re-joined with single spaces."""
+    the NER model); masked windows are re-joined with single spaces.  With return_names=True the
+    surface forms of the detected names are returned as well (used to mask the English translation)."""
     import torch
     from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
     device = device if device is not None else (0 if torch.cuda.is_available() else -1)
@@ -111,21 +112,69 @@ def mask_texts(texts, device=None, words_per_chunk=120):
         for i in range(0, len(words), words_per_chunk):
             chunks.append(" ".join(words[i:i + words_per_chunk])); owner.append(n)
     masked_chunks = []
+    names = [set() for _ in texts]
     bs = 64
     for i in range(0, len(chunks), bs):
         batch = chunks[i:i + bs]
         nonempty = [c for c in batch if c.strip()]
         ents = iter(ner(nonempty, batch_size=32) if nonempty else [])
-        for c in batch:
+        for j, c in enumerate(batch):
             if not c.strip():
                 masked_chunks.append(c); continue
             es = next(ents)
             spans = sorted([(e["start"], e["end"]) for e in es if e.get("entity_group") == "PER"], reverse=True)
             for s_, e_ in spans:
+                names[owner[i + j]].add(c[s_:e_].strip())
                 c = c[:s_] + "[KİŞİ]" + c[e_:]
             masked_chunks.append(c)
         if (i // bs) % 20 == 0:
             print(f"   masked {min(i + bs, len(chunks))}/{len(chunks)} chunks", flush=True)
+    out = [[] for _ in texts]
+    for n, c in zip(owner, masked_chunks):
+        out[n].append(c)
+    masked = [_mask_patterns(" ".join(parts)) for parts in out]
+    return (masked, [sorted(n) for n in names]) if return_names else masked
+
+
+def mask_texts_en(texts, names_tr=None, device=None, words_per_chunk=120):
+    """De-identifies English text (the machine translation of the body used in the earlier study): the
+    person names found by the Turkish NER model in the Turkish original (`names_tr`, one list per text)
+    are replaced where they occur, an English NER model (dslim/bert-base-NER) masks the remaining person
+    names, and e-mails, phone and identity numbers are masked by the same patterns.  Placeholder: [PERSON]."""
+    import torch
+    from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
+    device = device if device is not None else (0 if torch.cuda.is_available() else -1)
+    ckpt = "dslim/bert-base-NER"
+    tok = AutoTokenizer.from_pretrained(ckpt); tok.model_max_length = 512
+    ner = pipeline("ner", model=AutoModelForTokenClassification.from_pretrained(ckpt), tokenizer=tok,
+                   aggregation_strategy="simple", device=device)
+    pre = []
+    for n, t in enumerate(texts):
+        t = str(t)
+        for nm in sorted({x for x in (names_tr[n] if names_tr else []) if len(x) >= 3}, key=len, reverse=True):
+            for form in {nm, nm.upper()}:
+                t = re.sub(r"(?<!\w)" + re.escape(form) + r"(?!\w)", "[PERSON]", t)
+        pre.append(t)
+    chunks, owner = [], []
+    for n, t in enumerate(pre):
+        words = t.split()
+        if not words:
+            chunks.append(""); owner.append(n); continue
+        for i in range(0, len(words), words_per_chunk):
+            chunks.append(" ".join(words[i:i + words_per_chunk])); owner.append(n)
+    masked_chunks = []
+    for i in range(0, len(chunks), 64):
+        batch = chunks[i:i + 64]
+        nonempty = [c for c in batch if c.strip()]
+        ents = iter(ner(nonempty, batch_size=32) if nonempty else [])
+        for c in batch:
+            if not c.strip():
+                masked_chunks.append(c); continue
+            spans = sorted([(e["start"], e["end"]) for e in next(ents) if e.get("entity_group") == "PER"], reverse=True)
+            for s_, e_ in spans:
+                if c[s_:e_] != "PERSON":
+                    c = c[:s_] + "[PERSON]" + c[e_:]
+            masked_chunks.append(c)
     out = [[] for _ in texts]
     for n, c in zip(owner, masked_chunks):
         out[n].append(c)
@@ -489,7 +538,7 @@ def requery(models, modes, workers=6, max_attempts=3, hidden_threshold=20, max_c
                     continue
                 redo = []
                 for d, r in fin.items():
-                    if r.get("pass") == 2:
+                    if r.get("pass") == 2:           # already re-requested (pass-3 answers are checked like first answers)
                         continue
                     if provider == "anthropic" and hidden_output_tokens(r) > hidden_threshold:
                         redo.append((d, "hidden thinking"))
@@ -568,6 +617,110 @@ DECODING = {   # reported in the params column
 }
 
 
+def rerun_changed(models, modes=("rag10",), workers=6, dry_run=False, max_consecutive_failures=15):
+    """After retrieval moved to de-identified text (src/deidentify.py), the prompts whose ten retrieved
+    examples changed are asked again; the new answers are appended with "pass": 3 and supersede the
+    earlier ones (final_records keeps the last record of a document).  Prompts whose examples did not
+    change are identical to those already answered and are not repeated.  The earlier neighbour lists
+    are read from neighbours__<mode>__<split>__original_text.pkl.  With dry_run=True only the number
+    of changed prompts and the estimated cost (mean cost per document of the existing answers) are
+    reported (results/llm/rerun_changed_plan.json)."""
+    docs, labels = load_docs(); var = load_variants(); idx = split_indices(docs)
+    masked = get_masked(docs, var)
+    plan, summary = {}, {}
+    for mode in modes:
+        k = int(mode[3:]) if mode.startswith("rag") else 0
+        if not k:
+            continue
+        for split in PLAN.get(mode, ["test", "val"]):
+            old_f = LLM_DIR / f"neighbours__{mode}__{split}__original_text.pkl"
+            if not old_f.exists():
+                print(f"[{mode} | {split}] no archived neighbour lists ({old_f.name}): nothing to compare", flush=True)
+                continue
+            old = pd.read_pickle(old_f)
+            new = _neighbours(mode, split, docs, var, idx)
+            changed = sorted(d for d in new if list(old.get(d, [])) != list(new[d]))
+            reordered = sum(1 for d in changed if set(old.get(d, [])) == set(new[d]))
+            plan[(mode, split)] = changed
+            summary[f"{mode}__{split}"] = {"documents": len(new), "changed": len(changed), "same_examples_other_order": reordered}
+            print(f"[{mode} | {split}] prompts with changed examples: {len(changed)}/{len(new)} "
+                  f"({reordered} only in a different order)", flush=True)
+    est = {}
+    for model in models:
+        prov, pin, pout = model_info(model)
+        tot = 0.0
+        for (mode, split), changed in plan.items():
+            recs = list(final_records(LLM_DIR / f"{model}__{mode}__{split}.jsonl").values())
+            if recs and pin is not None:
+                tot += float(np.mean([(r["in_tokens"] * pin + r["out_tokens"] * pout) / 1e6 for r in recs])) * len(changed)
+        est[model] = round(tot, 2)
+    print("estimated cost of the new requests (USD):", est, "| total:", round(sum(est.values()), 2), flush=True)
+    (LLM_DIR / "rerun_changed_plan.json").write_text(json.dumps({"summary": summary, "estimated_usd": est,
+                                                                  "estimated_usd_total": round(sum(est.values()), 2)}, indent=2))
+    if dry_run:
+        return []
+    failed = []
+    for (mode, split), changed in plan.items():
+        k = int(mode[3:])
+        nbs = _neighbours(mode, split, docs, var, idx)
+        pos = {int(d): i for i, d in enumerate(docs["doc_id"].values)}
+        for model in models:
+            f = LLM_DIR / f"{model}__{mode}__{split}.jsonl"
+            done = {r["doc_id"] for r in read_records(f) if r.get("pass") == 3}       # resumable
+            todo = [d for d in changed if d not in done]
+            print(f"[rerun {model} | {mode} | {split}] {len(todo)} prompts to ask ({len(done)} already done)", flush=True)
+            if not todo:
+                continue
+            lock = threading.Lock()
+            state = {"consecutive": 0, "abort": False, "last_error": ""}
+
+            def work(d):
+                if state["abort"]:
+                    return False
+                i = pos[d]
+                ex = [(masked.iloc[j], docs["label"].values[j]) for j in nbs[d]]
+                user = build_user_text(masked.iloc[i], ex)
+                for attempt in range(6):
+                    if state["abort"]:
+                        return False
+                    try:
+                        t0 = time.time(); raw, tin, tout = call_model(model, user); lat = time.time() - t0
+                        rec = {"doc_id": d, "raw": raw, "units": parse_units(raw, labels), "in_tokens": tin, "out_tokens": tout,
+                               "latency_s": lat, "ts": time.time(), "cfg": _CFG.get(model), "pass": 3,
+                               "reason": "examples retrieved on de-identified text"}
+                        with lock:
+                            with open(f, "a", encoding="utf-8") as fh:
+                                fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                            state["consecutive"] = 0
+                        return True
+                    except Exception as e:
+                        state["last_error"] = str(e)[:300]
+                        time.sleep(2 ** attempt)
+                with lock:
+                    state["consecutive"] += 1
+                    if state["consecutive"] >= max_consecutive_failures:
+                        state["abort"] = True
+                return False
+
+            n_ok = int(work(todo[0]))          # one request first: a key or quota problem stops here
+            if not n_ok:
+                failed.append((model, mode, split))
+                print(f"!! [rerun {model}] first request failed: {state['last_error']}", flush=True)
+                continue
+            with ThreadPoolExecutor(max_workers=workers) as ex_:
+                futs = [ex_.submit(work, d) for d in todo[1:]]
+                for n, fu in enumerate(as_completed(futs), 2):
+                    n_ok += fu.result()
+                    if n % 200 == 0:
+                        print(f"   rerun {model} | {mode} | {split}: {n}/{len(todo)}", flush=True)
+            print(f"   finished {n_ok}/{len(todo)}", flush=True)
+            if state["abort"] or n_ok < len(todo):
+                failed.append((model, mode, split))
+                print(f"!! [rerun {model} | {mode} | {split}] {len(todo) - n_ok} prompts not done (run again to resume). "
+                      f"Last error: {state['last_error']}", flush=True)
+    return failed
+
+
 def summarise(models, modes, split="test"):
     """Metrics + prediction files in the common format for every finished (model, mode).  Answers are
     re-parsed from the raw text of the final record of each document (see parse_units)."""
@@ -635,8 +788,16 @@ if __name__ == "__main__":
     ap.add_argument("--requery", action="store_true", help="second pass: re-request answers without a valid unit and "
                     "Claude answers produced with hidden thinking (see requery)")
     ap.add_argument("--mask_only", action="store_true", help="only build the de-identified texts (GPU recommended)")
+    ap.add_argument("--rerun_changed", action="store_true", help="ask again the prompts whose retrieved examples changed "
+                    "when retrieval moved to de-identified text (see rerun_changed)")
+    ap.add_argument("--dry_run", action="store_true", help="with --rerun_changed: only count the prompts and estimate the cost")
     a = ap.parse_args()
-    if a.mask_only:
+    if a.rerun_changed:
+        bad = rerun_changed(a.models, [m for m in a.modes if m.startswith("rag")], a.workers, dry_run=a.dry_run)
+        if bad:
+            print("\nRERUN not finished for:", bad, "- run the same command again to resume")
+            sys.exit(1)
+    elif a.mask_only:
         d_, _ = load_docs(); get_masked(d_, load_variants()); print("masked texts ready:", MASKED)
     elif a.summarise:
         summarise(a.models, a.modes)

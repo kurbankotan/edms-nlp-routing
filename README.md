@@ -12,6 +12,8 @@ confidence-based deferral to staff and an optional retrieval-augmented LLM secon
 data/        raw_dataset.xlsx (restricted; not in the repository), documents.pkl, text_variants.pkl
 src/
   prepare_data.py     dispatch log -> document table, labels, chronological split, grouped folds, dataset_stats.json
+  deidentify.py       removes person names, e-mail addresses, telephone and identity numbers from every text field
+                      (Turkish NER + patterns; English NER for the translation), so that no model sees personal data
   preprocess.py       Turkish-native variants (raw / Snowball stem / Zeyrek lemma) + English translation arm
   common.py           shared protocol: validation-based selection, test once, grouped 5x2 CV, metrics, bootstrap, McNemar
   run_tfidf.py        lexical models and ablations (preprocessing, input field, translation, sender context)
@@ -42,7 +44,7 @@ cascade share are chosen on validation predictions (`results/preds_val/`) and ap
 
 ```bash
 pip install -r requirements.txt
-python src/prepare_data.py && python src/preprocess.py
+python src/prepare_data.py && python src/deidentify.py && python src/preprocess.py
 python src/run_tfidf.py                                   # lexical models (+ --with_sender for the context variant)
 python src/embed.py && python src/run_emb_parallel.py    # frozen encoders (embedding extraction on a GPU)
 python src/finetune.py --cv                               # fine-tuned encoders (GPU)
@@ -57,15 +59,18 @@ re-runs. Seeds: data folds 0/1, classifiers 0, fine-tuning 0/1/2, bootstrap 0.
 
 ## Data availability
 
-The raw EDMS export contains personal data and is available only under the conditions of the institutional ethics
-approval. The repository releases the construction script, the document identifiers of every partition and fold
+The raw EDMS export contains personal data and is not released; the university provided it for anonymised use in
+academic studies (see the Ethics statement of the paper). The repository releases the construction script, the document identifiers of every partition and fold
 (`results/dataset_stats.json` and the identifiers stored with every prediction file), all predictions, prompts and
 configuration, so that the evaluation can be audited without the raw data.
 
 ## LLM settings
 
-Claude Haiku 5.5 / Sonnet 5.5, GPT-6 Luna and Gemini 3.8 Flash were queried in November 2026 with extended reasoning
-switched off (Gemini: thinking budget 0, temperature 0; GPT-6 Luna: reasoning effort `none`, strict JSON schema;
-Claude: thinking `disabled`, or `between_tools` for Sonnet 5.5, which rejects `disabled`), 300 output tokens and
-de-identified text. Every response is stored in `results/llm/<model>__<mode>__<split>.jsonl` with its token counts and
-effective setting; re-requested answers are appended with `"pass": 2`, and the last record of a document is its answer.
+Claude Haiku 5.5, GPT-6 Luna and Gemini 3.8 Flash were queried in November 2026 with extended reasoning switched off
+(Gemini: thinking budget 0, temperature 0; GPT-6 Luna: reasoning effort `none`, strict JSON schema; Claude Haiku:
+thinking `disabled`), 300 output tokens and de-identified text only. Every response is stored in
+`results/llm/<model>__<mode>__<split>.jsonl` with its token counts and effective setting; re-requested answers are
+appended with `"pass": 2`, prompts asked again after the retrieval index was rebuilt on the de-identified text
+(`llm.py --rerun_changed`) with `"pass": 3`, and the last record of a document is its answer. The response files stay
+local; the final answers are released as prediction files in `results/preds` and `results/preds_val`. Claude Sonnet 5.5
+took part in a first run only and is not part of the reported comparison.

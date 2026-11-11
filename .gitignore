@@ -1,0 +1,9 @@
+# raw and de-identified EDMS text, embeddings and API responses stay local (personal data)
+data/
+cache/
+logs/
+results/llm/
+*.npy
+*.xlsx.bak
+__pycache__/
+.ipynb_checkpoints/

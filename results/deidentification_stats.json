@@ -1,0 +1,32 @@
+{
+  "documents": 9345,
+  "text": {
+    "[KİŞİ]": 7688,
+    "[PERSON]": 0,
+    "[E-POSTA]": 168,
+    "[TELEFON]": 63,
+    "[TCKN]": 34
+  },
+  "subject": {
+    "[KİŞİ]": 2115,
+    "[PERSON]": 0,
+    "[E-POSTA]": 0,
+    "[TELEFON]": 0,
+    "[TCKN]": 0
+  },
+  "content": {
+    "[KİŞİ]": 5990,
+    "[PERSON]": 0,
+    "[E-POSTA]": 178,
+    "[TELEFON]": 63,
+    "[TCKN]": 34
+  },
+  "content_en": {
+    "[KİŞİ]": 0,
+    "[PERSON]": 8226,
+    "[E-POSTA]": 0,
+    "[TELEFON]": 0,
+    "[TCKN]": 0
+  },
+  "documents_with_a_person_name": 3979
+}

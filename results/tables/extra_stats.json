@@ -1,151 +1,348 @@
 {
   "spearman_test_vs_cv_accuracy": {
-    "rho": 0.933952528379773,
-    "p": 1.478148230861364e-08,
+    "rho": 0.9360165118679051,
+    "p": 1.1541884991435719e-08,
     "n": 18
   },
   "spearman_val_vs_test_macro_f1": {
-    "rho": 0.7041219649915303,
-    "p": 0.00025478816014572745,
-    "n": 22
+    "rho": 0.7727272727272727,
+    "p": 4.027735878701309e-05,
+    "n": 21
   },
   "cv_minus_test_accuracy_points": {
-    "min": 1.6133128700289379,
-    "max": 5.92063409428728,
-    "median": 4.553911482104855
+    "min": 0.4434660458060735,
+    "max": 6.493508479723009,
+    "median": 4.673456585763347
   },
   "knn10_vote": {
-    "test_accuracy": 0.6654567453115547,
-    "test_macro_f1": 0.4853178324395516,
-    "val_accuracy": 0.6460759493670886,
-    "val_macro_f1": 0.4486273246041396
+    "test_accuracy": 0.6588021778584392,
+    "test_macro_f1": 0.4740114045250063,
+    "val_accuracy": 0.6526582278481012,
+    "val_macro_f1": 0.4498435933760389
   },
+  "lexical_representative": "TF-IDF word (lemma) / LinearSVM",
   "cascade": {
     "Cascade BERTurk -> Gemini": {
-      "llm_share": 0.26,
-      "test_accuracy": 0.7404718693284936,
-      "test_macro_f1": 0.6188777484368555,
-      "llm_usd_per_1000_docs_alone": 1.8704913793103448,
-      "llm_usd_per_1000_docs_cascade": 0.48632775862068967
+      "llm_share": 0.42,
+      "test_accuracy": 0.7368421052631579,
+      "test_macro_f1": 0.602098664754061,
+      "llm_usd_per_1000_docs_alone": 1.8554151542649728,
+      "llm_usd_per_1000_docs_cascade": 0.7792743647912885,
+      "val_accuracy_local_alone": 0.7184810126582278,
+      "val_accuracy_llm_alone": 0.7356962025316456
     },
-    "Cascade BERTurk -> Sonnet": {
-      "llm_share": 0.28,
-      "test_accuracy": 0.736237144585602,
-      "test_macro_f1": 0.5656173020028248,
-      "llm_usd_per_1000_docs_alone": 9.137551119177251,
-      "llm_usd_per_1000_docs_cascade": 2.5585143133696304
+    "Cascade BERTurk -> GPT": {
+      "llm_share": 0.42,
+      "test_accuracy": 0.7168784029038112,
+      "test_macro_f1": 0.5465056547829305,
+      "llm_usd_per_1000_docs_alone": 0.2946105868118573,
+      "llm_usd_per_1000_docs_cascade": 0.12373644646098006,
+      "val_accuracy_local_alone": 0.7184810126582278,
+      "val_accuracy_llm_alone": 0.7296202531645569
+    },
+    "Cascade BERTurk -> Haiku": {
+      "llm_share": 0.37,
+      "test_accuracy": 0.7114337568058077,
+      "test_macro_f1": 0.5456041728011847,
+      "llm_usd_per_1000_docs_alone": 0.4515481548699335,
+      "llm_usd_per_1000_docs_cascade": 0.1670728173018754,
+      "val_accuracy_local_alone": 0.7184810126582278,
+      "val_accuracy_llm_alone": 0.7139240506329114
     }
   },
   "mcnemar_extra": [
     {
-      "system_a": "Sonnet RAG",
-      "system_b": "Gemini RAG",
-      "acc_a": 0.7289776164549304,
-      "acc_b": 0.7344222625529341,
-      "n_a_only": 40,
-      "n_b_only": 49,
-      "statistic": 40.0,
-      "p_value": 0.39657015814551616,
-      "p_holm": 0.39657015814551616
+      "system_a": "Gemini RAG",
+      "system_b": "GPT RAG",
+      "acc_a": 0.7332123411978222,
+      "acc_b": 0.7108287961282517,
+      "n_a_only": 66,
+      "n_b_only": 29,
+      "statistic": 29.0,
+      "p_value": 0.00018640192629177998,
+      "p_holm": 0.00111841155775068
     },
     {
       "system_a": "Gemini RAG",
-      "system_b": "GPT RAG",
-      "acc_a": 0.7344222625529341,
-      "acc_b": 0.720508166969147,
-      "n_a_only": 55,
-      "n_b_only": 32,
-      "statistic": 32.0,
-      "p_value": 0.017827552929735955,
-      "p_holm": 0.07131021171894382
+      "system_b": "Haiku RAG",
+      "acc_a": 0.7332123411978222,
+      "acc_b": 0.6981246218995766,
+      "n_a_only": 109,
+      "n_b_only": 51,
+      "statistic": 51.0,
+      "p_value": 5.269038743016463e-06,
+      "p_holm": 4.742134868714817e-05
     },
     {
       "system_a": "Gemini RAG",
       "system_b": "BERTurk fine-tuned",
-      "acc_a": 0.7344222625529341,
-      "acc_b": 0.7102238354506957,
-      "n_a_only": 113,
-      "n_b_only": 73,
-      "statistic": 73.0,
-      "p_value": 0.004118244470934725,
-      "p_holm": 0.020591222354673627
+      "acc_a": 0.7332123411978222,
+      "acc_b": 0.6963097398669087,
+      "n_a_only": 131,
+      "n_b_only": 70,
+      "statistic": 70.0,
+      "p_value": 2.019310358381629e-05,
+      "p_holm": 0.00016154482867053032
+    },
+    {
+      "system_a": "Gemini RAG",
+      "system_b": "Qwen3-Embedding-4B / RBF-SVM",
+      "acc_a": 0.7332123411978222,
+      "acc_b": 0.7277676950998185,
+      "n_a_only": 108,
+      "n_b_only": 99,
+      "statistic": 99.0,
+      "p_value": 0.5782913753157676,
+      "p_holm": 0.5782913753157676
     },
     {
       "system_a": "BERTurk fine-tuned",
       "system_b": "Qwen3-Embedding-4B / RBF-SVM",
-      "acc_a": 0.7102238354506957,
+      "acc_a": 0.6963097398669087,
       "acc_b": 0.7277676950998185,
-      "n_a_only": 90,
-      "n_b_only": 119,
-      "statistic": 90.0,
-      "p_value": 0.05250921824499137,
-      "p_holm": 0.1575276547349741
+      "n_a_only": 82,
+      "n_b_only": 134,
+      "statistic": 82.0,
+      "p_value": 0.000491774597135943,
+      "p_holm": 0.0022473462322238173
     },
     {
       "system_a": "Qwen3-Embedding-4B / RBF-SVM",
-      "system_b": "TF-IDF stem / LinearSVM",
+      "system_b": "TF-IDF word (lemma) / LinearSVM",
       "acc_a": 0.7277676950998185,
-      "acc_b": 0.6836055656382335,
-      "n_a_only": 159,
-      "n_b_only": 86,
-      "statistic": 86.0,
-      "p_value": 3.613078626368621e-06,
-      "p_holm": 2.5291550384580348e-05
+      "acc_b": 0.6950998185117967,
+      "n_a_only": 142,
+      "n_b_only": 88,
+      "statistic": 88.0,
+      "p_value": 0.0004494692464447635,
+      "p_holm": 0.0022473462322238173
     },
     {
       "system_a": "Gemini RAG",
       "system_b": "kNN-10 vote",
-      "acc_a": 0.7344222625529341,
-      "acc_b": 0.6654567453115547,
-      "n_a_only": 181,
-      "n_b_only": 67,
-      "statistic": 67.0,
-      "p_value": 2.722383225531809e-13,
-      "p_holm": 2.553857942056478e-12
+      "acc_a": 0.7332123411978222,
+      "acc_b": 0.6588021778584392,
+      "n_a_only": 180,
+      "n_b_only": 57,
+      "statistic": 57.0,
+      "p_value": 4.81521229885169e-16,
+      "p_holm": 5.778254758622028e-15
     },
     {
-      "system_a": "Sonnet RAG",
+      "system_a": "GPT RAG",
       "system_b": "kNN-10 vote",
-      "acc_a": 0.7289776164549304,
-      "acc_b": 0.6654567453115547,
-      "n_a_only": 158,
-      "n_b_only": 53,
-      "statistic": 53.0,
-      "p_value": 2.553857942056478e-13,
-      "p_holm": 2.553857942056478e-12
+      "acc_a": 0.7108287961282517,
+      "acc_b": 0.6588021778584392,
+      "n_a_only": 155,
+      "n_b_only": 69,
+      "statistic": 69.0,
+      "p_value": 8.974782651263408e-09,
+      "p_holm": 9.872260916389749e-08
     },
     {
       "system_a": "Cascade BERTurk -> Gemini",
       "system_b": "BERTurk fine-tuned",
-      "acc_a": 0.7404718693284936,
-      "acc_b": 0.7102238354506957,
-      "n_a_only": 94,
-      "n_b_only": 44,
-      "statistic": 44.0,
-      "p_value": 2.5036308978341128e-05,
-      "p_holm": 0.00015021785387004676
+      "acc_a": 0.7368421052631579,
+      "acc_b": 0.6963097398669087,
+      "n_a_only": 126,
+      "n_b_only": 59,
+      "statistic": 59.0,
+      "p_value": 9.384602382193314e-07,
+      "p_holm": 9.384602382193314e-06
     },
     {
       "system_a": "Cascade BERTurk -> Gemini",
       "system_b": "Gemini RAG",
-      "acc_a": 0.7404718693284936,
-      "acc_b": 0.7344222625529341,
-      "n_a_only": 29,
-      "n_b_only": 19,
-      "statistic": 19.0,
-      "p_value": 0.19341265286193737,
-      "p_holm": 0.38682530572387475
+      "acc_a": 0.7368421052631579,
+      "acc_b": 0.7332123411978222,
+      "n_a_only": 11,
+      "n_b_only": 5,
+      "statistic": 5.0,
+      "p_value": 0.210113525390625,
+      "p_holm": 0.42022705078125
     },
     {
       "system_a": "TF-IDF body (TR)",
       "system_b": "TF-IDF body (EN, translated)",
-      "acc_a": 0.6448880822746521,
-      "acc_b": 0.5970961887477314,
+      "acc_a": 0.6406533575317604,
+      "acc_b": 0.6001209921355112,
       "n_a_only": 157,
-      "n_b_only": 78,
-      "statistic": 78.0,
-      "p_value": 2.822010503618358e-07,
-      "p_holm": 2.2576084028946866e-06
+      "n_b_only": 90,
+      "statistic": 90.0,
+      "p_value": 2.403454324015137e-05,
+      "p_holm": 0.0001682418026810596
+    },
+    {
+      "system_a": "mpnet body (TR, multilingual)",
+      "system_b": "mpnet body (EN, translated)",
+      "acc_a": 0.5958862673926195,
+      "acc_b": 0.6194797338173019,
+      "n_a_only": 170,
+      "n_b_only": 209,
+      "statistic": 170.0,
+      "p_value": 0.05080322320616166,
+      "p_holm": 0.15240966961848498
     }
-  ]
+  ],
+  "berturk_seed_sensitivity": {
+    "ft_bert-base-turkish-cased__FT_s0": {
+      "accuracy": 0.6963097398669087,
+      "p_vs_TF-IDF word (lemma) / LinearSVM": 0.9370201692131983,
+      "p_vs_Qwen3-Embedding-4B / RBF-SVM": 0.000491774597135943,
+      "p_vs_Gemini RAG": 2.019310358381629e-05
+    },
+    "ft_bert-base-turkish-cased__FT_s1": {
+      "accuracy": 0.6987295825771325,
+      "p_vs_TF-IDF word (lemma) / LinearSVM": 0.6705341002455008,
+      "p_vs_Qwen3-Embedding-4B / RBF-SVM": 0.0017920737015369888,
+      "p_vs_Gemini RAG": 5.416365361963827e-05
+    },
+    "ft_bert-base-turkish-cased__FT_s2": {
+      "accuracy": 0.7180883242589232,
+      "p_vs_TF-IDF word (lemma) / LinearSVM": 0.00464181232910736,
+      "p_vs_Qwen3-Embedding-4B / RBF-SVM": 0.2739199868727057,
+      "p_vs_Gemini RAG": 0.07093821456094433
+    }
+  },
+  "macro_f1_difference_bootstrap": {
+    "Gemini RAG | GPT RAG": {
+      "diff": 0.05763551007467438,
+      "ci": [
+        0.013907217177442258,
+        0.1018061389626068
+      ],
+      "share_le_0": 0.001
+    },
+    "Gemini RAG | Haiku RAG": {
+      "diff": 0.06341291968842855,
+      "ci": [
+        0.031076503851723798,
+        0.09974673741867286
+      ],
+      "share_le_0": 0.0
+    },
+    "Gemini RAG | Qwen3-Embedding-4B / RBF-SVM": {
+      "diff": 0.07445006104385121,
+      "ci": [
+        0.016884735566750873,
+        0.12693223680811747
+      ],
+      "share_le_0": 0.003
+    },
+    "Gemini RAG | BERTurk fine-tuned": {
+      "diff": 0.07125584258078921,
+      "ci": [
+        0.01739271652696546,
+        0.12116192761851095
+      ],
+      "share_le_0": 0.003
+    },
+    "Gemini RAG | TF-IDF word (lemma) / LinearSVM": {
+      "diff": 0.06833927512998528,
+      "ci": [
+        0.014734527100861311,
+        0.11743611159210131
+      ],
+      "share_le_0": 0.0025
+    },
+    "BERTurk fine-tuned | TF-IDF word (lemma) / LinearSVM": {
+      "diff": -0.0029165674508039308,
+      "ci": [
+        -0.024272791558755162,
+        0.017532874902416545
+      ],
+      "share_le_0": 0.5765
+    },
+    "BERTurk fine-tuned | Qwen3-Embedding-4B / RBF-SVM": {
+      "diff": 0.003194218463062004,
+      "ci": [
+        -0.01868223466329514,
+        0.027019502415787888
+      ],
+      "share_le_0": 0.409
+    },
+    "TF-IDF word (lemma) / LinearSVM | Qwen3-Embedding-4B / RBF-SVM": {
+      "diff": 0.006110785913865935,
+      "ci": [
+        -0.018991679482239208,
+        0.03219391909733629
+      ],
+      "share_le_0": 0.3245
+    },
+    "Cascade BERTurk -> Gemini | Gemini RAG": {
+      "diff": 0.002798862461178442,
+      "ci": [
+        -0.001808011995777567,
+        0.007676456873505395
+      ],
+      "share_le_0": 0.1165
+    },
+    "mpnet body (TR, multilingual) | mpnet body (EN, translated)": {
+      "diff": 0.025084492486883103,
+      "ci": [
+        -0.00851126504059558,
+        0.05736160931689639
+      ],
+      "share_le_0": 0.066
+    }
+  },
+  "macro_f1_difference_bootstrap_without_smallest_unit": {
+    "excluded_unit": "Sağlık Hizmetleri Şube Müdürlüğü",
+    "n_test_documents_of_excluded_unit": 1,
+    "macro_f1": {
+      "Gemini RAG": 0.6159081191506228,
+      "GPT RAG": 0.5868029832363922,
+      "Haiku RAG": 0.5597107894881584,
+      "BERTurk fine-tuned": 0.5720476230214345,
+      "Qwen3-Embedding-4B / RBF-SVM": 0.5685872196864507,
+      "TF-IDF word (lemma) / LinearSVM": 0.5752072377598054
+    },
+    "Gemini RAG | GPT RAG": {
+      "diff": 0.029105135914230584,
+      "ci": [
+        0.011099771406773212,
+        0.05009917731788741
+      ]
+    },
+    "Gemini RAG | Haiku RAG": {
+      "diff": 0.05619732966246438,
+      "ci": [
+        0.030830972669421492,
+        0.08308667076921136
+      ]
+    },
+    "Gemini RAG | Qwen3-Embedding-4B / RBF-SVM": {
+      "diff": 0.04732089946417217,
+      "ci": [
+        0.011221612790942661,
+        0.08519699175033915
+      ]
+    },
+    "Gemini RAG | BERTurk fine-tuned": {
+      "diff": 0.0438604961291883,
+      "ci": [
+        0.008674860502410493,
+        0.0763715225843598
+      ]
+    },
+    "Gemini RAG | TF-IDF word (lemma) / LinearSVM": {
+      "diff": 0.0407008813908174,
+      "ci": [
+        0.006613625516036623,
+        0.07368026752937618
+      ]
+    }
+  },
+  "rag_prompts_asked_again": {
+    "rag10__test": {
+      "documents": 1653,
+      "changed": 1481,
+      "same_examples_other_order": 435
+    },
+    "rag10__val": {
+      "documents": 1975,
+      "changed": 1707,
+      "same_examples_other_order": 549
+    }
+  }
 }

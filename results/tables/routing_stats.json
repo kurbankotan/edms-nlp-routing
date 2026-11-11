@@ -1,16 +1,16 @@
 {
   "BERTurk fine-tuned": {
-    "flat_accuracy": 0.7102238354506957,
-    "top_down_accuracy": 0.7102238354506957,
-    "department_accuracy_flat": 0.8947368421052632,
-    "department_accuracy_from_unit": 0.8868723532970357,
+    "flat_accuracy": 0.6963097398669087,
+    "top_down_accuracy": 0.6950998185117967,
+    "department_accuracy_flat": 0.9050211736237145,
+    "department_accuracy_from_unit": 0.9044162129461585,
     "n_val_recent": 978
   },
-  "TF-IDF (stem) + linear SVM": {
-    "flat_accuracy": 0.6836055656382335,
-    "top_down_accuracy": 0.6805807622504537,
-    "department_accuracy_flat": 0.896551724137931,
-    "department_accuracy_from_unit": 0.9013914095583787,
+  "TF-IDF (lemma) + linear SVM": {
+    "flat_accuracy": 0.6950998185117967,
+    "top_down_accuracy": 0.6938898971566848,
+    "department_accuracy_flat": 0.9044162129461585,
+    "department_accuracy_from_unit": 0.9068360556563824,
     "n_val_recent": 978
   }
 }

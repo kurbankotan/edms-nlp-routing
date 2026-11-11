@@ -33,6 +33,20 @@ gibi hem hep hepsi her hiç için ile ise kez ki kim mı mu mü nasıl ne neden 
 TR_STOPWORDS |= {"arz", "ederim", "rica", "gereğini", "bilgilerinizi", "bilgilerinize", "hk", "hakkında"}
 
 
+# placeholders of the de-identified text (src/deidentify.py) become single tokens that cannot collide
+# with ordinary words (e.g. "[KİŞİ]" would otherwise become the common word "kişi")
+PLACEHOLDER_TOKENS_TR = {"[KİŞİ]": " kisiadi ", "[PERSON]": " kisiadi ", "[E-POSTA]": " epostaadresi ",
+                         "[TELEFON]": " telefonnumarasi ", "[TCKN]": " kimliknumarasi "}
+PLACEHOLDER_TOKENS_EN = {"[PERSON]": " personname ", "[KİŞİ]": " personname ", "[E-POSTA]": " emailaddress ",
+                         "[TELEFON]": " phonenumber ", "[TCKN]": " idnumber "}
+
+
+def placeholders_to_tokens(s: str, table=PLACEHOLDER_TOKENS_TR) -> str:
+    for k, v in table.items():
+        s = s.replace(k, v)
+    return s
+
+
 def tr_lower(s: str) -> str:
     return s.replace("İ", "i").replace("I", "ı").lower()
 
@@ -45,7 +59,7 @@ def clean_text(s: str) -> str:
 
 
 def tokens_raw(s: str):
-    s = tr_lower(clean_text(s))
+    s = tr_lower(clean_text(placeholders_to_tokens(str(s))))
     s = re.sub(r"[^a-zçğıöşü]+", " ", s)
     return [w for w in s.split() if w not in TR_STOPWORDS and len(w) > 1]
 
@@ -112,6 +126,8 @@ def ensure_nltk():
 def main():
     ensure_nltk()
     docs = pd.read_pickle(DOCS)
+    if not ("deidentified" in docs.columns and bool(docs["deidentified"].all())):
+        print("NOTE: data/documents.pkl is not de-identified; run src/deidentify.py first so that no model sees person names")
     out = pd.DataFrame({"doc_id": docs["doc_id"]})
     out["text_clean"] = docs["text"].map(clean_text)
     out["content_clean"] = docs["content"].map(clean_text)
@@ -124,7 +140,7 @@ def main():
     def en_tokens(s):
         if not isinstance(s, str):
             return None
-        s = re.sub(r"[^a-z]+", " ", s.lower())
+        s = re.sub(r"[^a-z]+", " ", placeholders_to_tokens(s, PLACEHOLDER_TOKENS_EN).lower())
         return " ".join(w for w in s.split() if w not in ENGLISH_STOP_WORDS and len(w) > 1)
     out["content_en"] = docs["content_en"].map(en_tokens)
     out["content_en_clean"] = docs["content_en"].map(lambda t: clean_text(t) if isinstance(t, str) else "")

@@ -117,5 +117,8 @@
     }
   },
   "n_test_docs_with_identical_text_in_train": 57,
-  "n_documents_with_english_content": 8940
+  "n_documents_with_english_content": 8940,
+  "dispatch_time_min": "2020-01-02",
+  "dispatch_time_max": "2022-12-30",
+  "n_documents_registered_before_dispatch_period": 8
 }

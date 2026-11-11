@@ -1,27 +1,27 @@
 {
   "representation": "ft_xlm-roberta-base",
   "family": "FT_s0",
-  "params": "{\"lr\": 5e-05, \"epochs\": 6, \"seed\": 0, \"max_len\": 256, \"batch\": 32, \"precision\": \"float16\"}",
+  "params": "{\"lr\": 5e-05, \"epochs\": 5, \"seed\": 0, \"max_len\": 256, \"batch\": 32, \"precision\": \"float16\"}",
   "accuracy": 0.6811857229280097,
-  "macro_f1": 0.4999742988459684,
-  "weighted_f1": 0.6836387155724399,
-  "balanced_accuracy": 0.4905307714716496,
-  "macro_precision": 0.537087563017831,
-  "macro_recall": 0.4905307714716496,
-  "department_accuracy": 0.8802177858439202,
-  "top2_accuracy": 0.8058076225045372,
-  "top3_accuracy": 0.8796128251663642,
+  "macro_f1": 0.5012947367622134,
+  "weighted_f1": 0.6815435166984823,
+  "balanced_accuracy": 0.49211074546173084,
+  "macro_precision": 0.5486165553776352,
+  "macro_recall": 0.49211074546173084,
+  "department_accuracy": 0.8838475499092558,
+  "top2_accuracy": 0.7991530550514216,
+  "top3_accuracy": 0.8790078644888082,
   "lenient_accuracy": 0.7005444646098004,
   "accuracy_ci": [
     0.6594071385359952,
-    0.7035692679975801
+    0.7029794313369631
   ],
   "macro_f1_ci": [
-    0.4682772558743951,
-    0.5309256093567862
+    0.46763623821476413,
+    0.5315300304436547
   ],
-  "fit_seconds_trainval": 347.13576555252075,
-  "predict_ms_per_doc": 1.3080681733340835,
+  "fit_seconds_trainval": 335.338312625885,
+  "predict_ms_per_doc": 1.563486876952165,
   "n_features": 0,
   "checkpoint": "xlm-roberta-base",
   "model_family": "fine-tuned encoder",

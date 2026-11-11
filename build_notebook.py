@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-SRC_FILES = ["prepare_data.py", "preprocess.py", "common.py", "embed.py", "run_tfidf.py", "run_embeddings.py", "run_emb_parallel.py",
+SRC_FILES = ["prepare_data.py", "deidentify.py", "preprocess.py", "common.py", "embed.py", "run_tfidf.py", "run_embeddings.py", "run_emb_parallel.py",
              "finetune.py", "llm.py", "analysis.py", "routing.py"]
 PAPER_FILES = ["extra_stats.py"]          # statistics quoted in the manuscript (imports src/ modules)
 BASE = "/content/drive/MyDrive/ebys-routing"
@@ -89,8 +89,8 @@ RUN_TFIDF, RUN_EMBED, RUN_FINETUNE, RUN_LLM, RUN_ANALYSIS = True, True, True, Tr
 EMBED_MODELS    = ["minilm_multi", "distiluse_multi", "sbert_tr", "berturk_mean", "mpnet_multi", "e5_base", "labse",
                    "e5_large", "bge_m3", "qwen3_0_6b", "qwen3_4b"]
 FINETUNE_MODELS = ["dbmdz/bert-base-turkish-cased", "xlm-roberta-base"]
-LLM_MODELS      = ["gemini-3.8-flash", "gpt-6-luna"]     # Claude ek defterde (EBYS_LLM_ek.ipynb) çalıştırılıyor
-SUMMARY_MODELS  = ["claude-haiku-5-5", "claude-sonnet-5-5", "gpt-6-luna", "gemini-3.8-flash"]   # özetlenecek tüm BDM'ler
+LLM_MODELS      = ["gemini-3.8-flash", "gpt-6-luna", "claude-haiku-5-5"]     # makaledeki üç BDM
+SUMMARY_MODELS  = list(LLM_MODELS)                                            # özetlenecek BDM'ler
 LLM_MODES       = ["zeroshot", "rag10"]   # zeroshot -> yalnız test; rag10 -> test + doğrulama (kademe eşiği için)
 LLM_WORKERS     = 6                       # sağlayıcı başına eşzamanlı istek; 429 hataları görürseniz 3'e indirin
 
@@ -213,9 +213,10 @@ def wait_bg(every=120):
         if p.returncode != 0:
             FAILURES.append(cmd)""")
 
-code("""# === 5. Veri hazırlama ve Türkçe önişleme (~3 dk) ===
+code("""# === 5. Veri hazırlama, kimliksizleştirme (GPU) ve Türkçe önişleme (~15 dk) ===
 if not os.path.exists(f"{BASE}/data/documents.pkl"):
     run("python src/prepare_data.py", "prepare")
+run("python src/deidentify.py", "prepare")     # kişi adları ve iletişim bilgileri çıkarılır; tüm modeller isimsiz metni görür
 if not os.path.exists(f"{BASE}/data/text_variants.pkl"):
     run("python src/preprocess.py", "prepare")
 st = json.load(open(f"{BASE}/results/dataset_stats.json"))

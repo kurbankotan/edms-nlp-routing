@@ -4,7 +4,8 @@ import re
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent
-M = json.loads((OUT / "manuscript.json").read_text())
+import sys
+M = json.loads((Path(sys.argv[1]) if len(sys.argv) > 1 else OUT / "manuscript.json").read_text())
 text = " ".join(b.get("text", "") + " " + " ".join(b.get("items", []) if b["type"] != "references" else []) + " " + b.get("caption", "")
                 + " " + " ".join(" ".join(map(str, r)) for r in b.get("rows", [])) for b in M["blocks"])
 refs = next(b["items"] for b in M["blocks"] if b["type"] == "references")
@@ -19,9 +20,13 @@ cited = set(re.findall(r"([A-ZÇĞİÖŞÜ][\w'’\-]+)(?: et al\.| & [A-ZÇĞİ
 problems = []
 for (surname, year) in keys:
     first = surname.split()[0]
+    if f"{surname}, {year}" in text or f"{surname} ({year})" in text:      # corporate authors such as "Republic of Türkiye"
+        continue
     if not any(c[0].startswith(first[:5]) and c[1] == year for c in cited):
         problems.append(f"reference never cited: {surname} ({year})")
 for (s, y) in sorted(cited):
+    if any(k[0].endswith(" " + s) and k[1] == y for k in keys):           # last word of a corporate author
+        continue
     if not any(k[0].startswith(s[:5]) and k[1] == y for k in keys) and s not in ("Section", "Table", "Figure", "Eq", "Law", "Eqs", "Fig", "In", "H1", "H2",
                                                                                "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"):
         problems.append(f"citation without reference: {s} ({y})")

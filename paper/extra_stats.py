@@ -61,9 +61,17 @@ def preds(key):
     p = load_pred(key)
     return pd.Series(np.asarray(p["y_pred"]), index=p["doc_id"]).reindex(ids_t).values
 P = {"BERTurk fine-tuned": preds(pk("BERTurk fine-tuned")), "Qwen3-Embedding-4B / RBF-SVM": preds(pk("Qwen3-Embedding-4B")),
-     "Gemini RAG": preds("llm_gemini-3.8-flash__rag10"), "Sonnet RAG": preds("llm_claude-sonnet-5-5__rag10"),
-     "GPT RAG": preds("llm_gpt-6-luna__rag10"), "TF-IDF stem / LinearSVM": preds(pk("TF-IDF word (stem)")),
      "kNN-10 vote": knn_t}
+reps_tab = pd.read_csv(RESULTS / "tables" / "representatives.csv")
+LEX = reps_tab.loc[reps_tab["group"] == "Lexical (TF-IDF)", "system"].iloc[0]       # lexical family representative
+P[LEX] = preds(sel.loc[sel["system"] == LEX, "pred_key"].iloc[0])
+out["lexical_representative"] = LEX
+# retrieval-augmented LLMs that were run (results_llm.csv); the study may include a subset of these models
+LLM_SHORT = {"gemini-3.8-flash": "Gemini", "gpt-6-luna": "GPT", "claude-haiku-5-5": "Haiku", "claude-sonnet-5-5": "Sonnet"}
+_llm_rows = pd.read_csv(RESULTS / "results_llm.csv")
+LLM_RUN = [m for m in LLM_SHORT if ((_llm_rows["representation"] == f"llm_{m}") & (_llm_rows["family"] == "rag10")).any()]
+for m in LLM_RUN:
+    P[f"{LLM_SHORT[m]} RAG"] = preds(f"llm_{m}__rag10")
 
 # cascade predictions (local = BERTurk fine-tuned seed 0, share chosen on validation by best accuracy)
 ft_key = pk("BERTurk fine-tuned"); pt, pv = load_pred(ft_key), load_pred(ft_key, val=True)
@@ -82,20 +90,26 @@ def cascade(model):
     p_t = run(s, ct, pt["y_pred"], llm_t)
     p_t = pd.Series(p_t, index=pt["doc_id"]).reindex(ids_t).values
     usd = float(llm_cost.loc[(f"llm_{model}", "rag10"), "usd_per_1000_docs"])
-    return s, p_t, usd
+    return s, p_t, usd, float(accs[0]), float(accs[-1])
 casc = {}
-for model, name in [("gemini-3.8-flash", "Cascade BERTurk -> Gemini"), ("claude-sonnet-5-5", "Cascade BERTurk -> Sonnet")]:
-    s, p_t, usd = cascade(model)
+for model in LLM_RUN:
+    name = f"Cascade BERTurk -> {LLM_SHORT[model]}"
+    s, p_t, usd, v_loc, v_llm = cascade(model)
     P[name] = p_t
     casc[name] = {"llm_share": s, "test_accuracy": float((p_t == y_t).mean()),
                   "test_macro_f1": float(f1_score(y_t, p_t, labels=labels, average="macro", zero_division=0)),
-                  "llm_usd_per_1000_docs_alone": usd, "llm_usd_per_1000_docs_cascade": usd * s}
+                  "llm_usd_per_1000_docs_alone": usd, "llm_usd_per_1000_docs_cascade": usd * s,
+                  "val_accuracy_local_alone": v_loc, "val_accuracy_llm_alone": v_llm}
 out["cascade"] = casc
 
-pairs = [("Sonnet RAG", "Gemini RAG"), ("Gemini RAG", "GPT RAG"), ("Gemini RAG", "BERTurk fine-tuned"),
-         ("BERTurk fine-tuned", "Qwen3-Embedding-4B / RBF-SVM"), ("Qwen3-Embedding-4B / RBF-SVM", "TF-IDF stem / LinearSVM"),
-         ("Gemini RAG", "kNN-10 vote"), ("Sonnet RAG", "kNN-10 vote"),
-         ("Cascade BERTurk -> Gemini", "BERTurk fine-tuned"), ("Cascade BERTurk -> Gemini", "Gemini RAG")]
+# pairs among the LLMs that were run (each against the most accurate one), plus the fixed local comparisons
+rag = sorted([n for n in P if n.endswith(" RAG")], key=lambda n: -(P[n] == y_t).mean())
+pairs = [(rag[0], other) for other in rag[1:]]
+pairs += [(rag[0], "BERTurk fine-tuned"), (rag[0], "Qwen3-Embedding-4B / RBF-SVM"), ("BERTurk fine-tuned", "Qwen3-Embedding-4B / RBF-SVM"),
+          ("Qwen3-Embedding-4B / RBF-SVM", LEX)]
+pairs += [(n, "kNN-10 vote") for n in rag[:2]]
+best_casc = max([n for n in P if n.startswith("Cascade")], key=lambda n: (P[n] == y_t).mean())
+pairs += [(best_casc, "BERTurk fine-tuned"), (best_casc, best_casc.split("-> ")[1] + " RAG")]
 rows = []
 for a, b in pairs:
     r = mcnemar_test(y_t, P[a], P[b])
@@ -105,6 +119,12 @@ ctr, cen = load_pred(pk("TF-IDF content (TR)")), load_pred(pk("TF-IDF content (E
 a_ = pd.Series(ctr["y_pred"], index=ctr["doc_id"]).reindex(ids_t).values; b_ = pd.Series(cen["y_pred"], index=cen["doc_id"]).reindex(ids_t).values
 rows.append({"system_a": "TF-IDF body (TR)", "system_b": "TF-IDF body (EN, translated)", "acc_a": float((a_ == y_t).mean()), "acc_b": float((b_ == y_t).mean()),
              **mcnemar_test(y_t, a_, b_)})
+# the same comparison for sentence encoders: multilingual mpnet on the Turkish body vs English all-mpnet on the translated body
+etr, een = load_pred(pk("paraphrase-multilingual-mpnet-base [content only")), load_pred(pk("all-mpnet-base-v2"))
+a_ = pd.Series(etr["y_pred"], index=etr["doc_id"]).reindex(ids_t).values; b_ = pd.Series(een["y_pred"], index=een["doc_id"]).reindex(ids_t).values
+rows.append({"system_a": "mpnet body (TR, multilingual)", "system_b": "mpnet body (EN, translated)", "acc_a": float((a_ == y_t).mean()),
+             "acc_b": float((b_ == y_t).mean()), **mcnemar_test(y_t, a_, b_)})
+P["mpnet body (TR, multilingual)"], P["mpnet body (EN, translated)"] = a_, b_
 mc = pd.DataFrame(rows)
 order = np.argsort(mc["p_value"].values); m = len(mc); adj = np.empty(m); running = 0
 for rank, k in enumerate(order):
@@ -112,6 +132,59 @@ for rank, k in enumerate(order):
 mc["p_holm"] = adj
 mc.to_csv(RESULTS / "tables" / "mcnemar_extra.csv", index=False)
 out["mcnemar_extra"] = mc.to_dict("records")
+
+# 4. seed sensitivity: the tests above use BERTurk seed 0; the same tests with the other two seeds ------------------
+assert ft_key.endswith("_s0"), ft_key
+ft_seed_keys = [ft_key[:-1] + str(s) for s in range(3)]
+seed_rows = {}
+for key in ft_seed_keys:
+    try:
+        pb = preds(key)
+    except Exception:
+        continue
+    seed_rows[key] = {"accuracy": float((pb == y_t).mean()),
+                      **{f"p_vs_{n}": float(mcnemar_test(y_t, pb, P[n])["p_value"]) for n in [LEX, "Qwen3-Embedding-4B / RBF-SVM", rag[0]]}}
+out["berturk_seed_sensitivity"] = seed_rows
+
+# 5. paired bootstrap of macro-F1 differences (2,000 resamples of the test documents) ----------------------------
+lab_id = {l: i for i, l in enumerate(labels)}
+yi = np.array([lab_id[v] for v in y_t])
+def as_int(p):
+    return np.array([lab_id.get(v, -1) for v in p])
+def macro_f1_fast(y, p, K=len(labels), keep=None):
+    tp = np.bincount(y[y == p], minlength=K)[:K]; pc = np.bincount(p[p >= 0], minlength=K)[:K]; tc = np.bincount(y, minlength=K)[:K]
+    den = pc + tc
+    f1 = np.where(den > 0, 2 * tp / np.maximum(den, 1), 0.0)
+    return float(f1.mean() if keep is None else f1[keep].mean())
+rng = np.random.default_rng(0)
+boot_idx = [rng.integers(0, len(yi), len(yi)) for _ in range(2000)]
+f1_pairs = [(rag[0], n) for n in rag[1:]] + [(rag[0], "Qwen3-Embedding-4B / RBF-SVM"), (rag[0], "BERTurk fine-tuned"), (rag[0], LEX),
+                                            ("BERTurk fine-tuned", LEX), ("BERTurk fine-tuned", "Qwen3-Embedding-4B / RBF-SVM"),
+                                            (LEX, "Qwen3-Embedding-4B / RBF-SVM"), (best_casc, rag[0]),
+                                            ("mpnet body (TR, multilingual)", "mpnet body (EN, translated)")]
+boot = {}
+for a, b in f1_pairs:
+    pa, pb = as_int(P[a]), as_int(P[b])
+    d = np.array([macro_f1_fast(yi[i], pa[i]) - macro_f1_fast(yi[i], pb[i]) for i in boot_idx])
+    boot[f"{a} | {b}"] = {"diff": macro_f1_fast(yi, pa) - macro_f1_fast(yi, pb), "ci": [float(np.percentile(d, 2.5)), float(np.percentile(d, 97.5))],
+                          "share_le_0": float((d <= 0).mean())}
+out["macro_f1_difference_bootstrap"] = boot
+# the same without the unit with the fewest test documents (one document: its F1 is either 0 or driven by a single case)
+smallest = labels[int(np.argmin(np.bincount(yi, minlength=len(labels))))]
+keep = np.array([l != smallest for l in labels])
+boot_s = {"excluded_unit": smallest, "n_test_documents_of_excluded_unit": int((yi == lab_id[smallest]).sum()),
+          "macro_f1": {n: macro_f1_fast(yi, as_int(P[n]), keep=keep) for n in rag + ["BERTurk fine-tuned", "Qwen3-Embedding-4B / RBF-SVM", LEX]}}
+for a, b in [(rag[0], n) for n in rag[1:]] + [(rag[0], "Qwen3-Embedding-4B / RBF-SVM"), (rag[0], "BERTurk fine-tuned"), (rag[0], LEX)]:
+    pa, pb = as_int(P[a]), as_int(P[b])
+    d = np.array([macro_f1_fast(yi[i], pa[i], keep=keep) - macro_f1_fast(yi[i], pb[i], keep=keep) for i in boot_idx])
+    boot_s[f"{a} | {b}"] = {"diff": macro_f1_fast(yi, pa, keep=keep) - macro_f1_fast(yi, pb, keep=keep),
+                            "ci": [float(np.percentile(d, 2.5)), float(np.percentile(d, 97.5))]}
+out["macro_f1_difference_bootstrap_without_smallest_unit"] = boot_s
+
+# 6. retrieval-augmented prompts asked again after the retrieval index was rebuilt on the de-identified text ------------
+plan_f = RESULTS / "llm" / "rerun_changed_plan.json"
+if plan_f.exists():
+    out["rag_prompts_asked_again"] = json.loads(plan_f.read_text())["summary"]
 (RESULTS / "tables" / "extra_stats.json").write_text(json.dumps(out, indent=2, ensure_ascii=False))
 print(json.dumps({k: v for k, v in out.items() if k != "mcnemar_extra"}, indent=1))
 print(mc.round(4).to_string(index=False))

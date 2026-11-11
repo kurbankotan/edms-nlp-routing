@@ -14,15 +14,16 @@ const SMALL = 18;     // 9 pt
 const PAGE_W = 11906, PAGE_H = 16838, MARGIN = 1440;   // A4, 1-inch margins
 const TEXT_W = PAGE_W - 2 * MARGIN;
 
-// ---- inline markup: **bold**, *italic*, ^{sup}, _{sub}
+// ---- inline markup: [[to be completed]] (highlighted), **bold**, *italic*, ^{sup}, _{sub}
 function runs(text, base = {}) {
   const out = [];
-  const re = /(\*\*[^*]+\*\*|\*[^*]+\*|\^\{[^}]+\}|_\{[^}]+\})/g;
+  const re = /(\[\[[^\]]+\]\]|\*\*[^*]+\*\*|\*[^*]+\*|\^\{[^}]+\}|_\{[^}]+\})/g;
   let last = 0, m;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) out.push(new TextRun({ text: text.slice(last, m.index), font: FONT, ...base }));
     const t = m[0];
-    if (t.startsWith("**")) out.push(new TextRun({ text: t.slice(2, -2), font: FONT, bold: true, ...base }));
+    if (t.startsWith("[[")) out.push(new TextRun({ text: t, font: FONT, bold: true, highlight: "yellow", ...base }));
+    else if (t.startsWith("**")) out.push(new TextRun({ text: t.slice(2, -2), font: FONT, bold: true, ...base }));
     else if (t.startsWith("*")) out.push(new TextRun({ text: t.slice(1, -1), font: FONT, italics: true, ...base }));
     else if (t.startsWith("^{")) out.push(new TextRun({ text: t.slice(2, -1), font: FONT, superScript: true, ...base }));
     else out.push(new TextRun({ text: t.slice(2, -1), font: FONT, subScript: true, ...base }));
@@ -41,9 +42,9 @@ const para = (text, opts = {}) => new Paragraph({
 const children = [];
 // ---- title block
 children.push(new Paragraph({ children: runs(M.meta.title, { bold: true, size: 30 }), alignment: AlignmentType.LEFT, spacing: { after: 200, line: 300 } }));
-children.push(new Paragraph({ children: runs(M.meta.authors, { size: BODY }), alignment: AlignmentType.LEFT, spacing: { after: 80 } }));
-for (const a of M.meta.affiliations) children.push(new Paragraph({ children: runs(a, { size: 20 }), alignment: AlignmentType.LEFT, spacing: { after: 40 } }));
-children.push(new Paragraph({ children: runs(M.meta.corresponding, { size: 20 }), alignment: AlignmentType.LEFT, spacing: { after: 240 } }));
+if (M.meta.authors) children.push(new Paragraph({ children: runs(M.meta.authors, { size: BODY }), alignment: AlignmentType.LEFT, spacing: { after: 80 } }));
+for (const a of (M.meta.affiliations || [])) children.push(new Paragraph({ children: runs(a, { size: 20 }), alignment: AlignmentType.LEFT, spacing: { after: 40 } }));
+if (M.meta.corresponding) children.push(new Paragraph({ children: runs(M.meta.corresponding, { size: 20 }), alignment: AlignmentType.LEFT, spacing: { after: 240 } }));
 
 let figN = 0, tabN = 0;
 for (const b of M.blocks) {
@@ -121,7 +122,7 @@ for (const b of M.blocks) {
 }
 
 const doc = new Document({
-  creator: "Kotan & Kırışoğlu", title: M.meta.title,
+  creator: M.meta.creator || "Anonymous", lastModifiedBy: M.meta.creator || "Anonymous", title: M.meta.title,
   styles: {
     default: { document: { run: { font: FONT, size: BODY } } },
     paragraphStyles: [

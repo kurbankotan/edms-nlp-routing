@@ -28,6 +28,9 @@ FIG = ROOT / "figures"
 OUT = ROOT / "paper"
 
 PENDING = "[pending]"
+ANON = "--anon" in sys.argv     # copy for double-anonymized review: no author details, institution name or repository owner
+sys.path.insert(0, str(OUT))
+import statements as S          # noqa: E402  (declarations shared with the title page and the cover letter)
 
 
 # ----------------------------------------------------------------------------- data access
@@ -41,6 +44,7 @@ def load():
     R["ex"] = json.loads((TAB / "extra_stats.json").read_text()) if (TAB / "extra_stats.json").exists() else {}
     R["rs"] = json.loads((TAB / "routing_stats.json").read_text()) if (TAB / "routing_stats.json").exists() else {}
     R["llm"] = pd.read_csv(RES / "results_llm.csv") if (RES / "results_llm.csv").exists() else None
+    R["deid"] = json.loads((RES / "deidentification_stats.json").read_text()) if (RES / "deidentification_stats.json").exists() else {}
     return R
 
 
@@ -75,6 +79,11 @@ def fig_block(name, caption, width_in=6.3):
     return {"type": "figure", "path": f"figures/{name}.png", "caption": caption, "width_in": width_in, "aspect": w / h}
 
 
+def small(n):
+    """Integers below ten in words (journal style)."""
+    return ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"][n] if 0 <= n < 10 else f"{n:,}"
+
+
 def H(level, text):
     return {"type": "heading", "level": level, "text": text}
 
@@ -94,8 +103,10 @@ def build(R):
         r = reps[reps["group"] == group] if reps is not None else None
         return r.iloc[0] if r is not None and len(r) else None
     lex, rep_emb, ft, rep_llm = (rep_of(g) for g in ["Lexical (TF-IDF)", "Frozen encoder", "Fine-tuned encoder", "LLM"])
-    gem, son, gpt, hai = (row_of(main, f"{LLM_NAMES['llm_' + m]} / RAG-10") for m in ["gemini-3.8-flash", "claude-sonnet-5-5", "gpt-6-luna", "claude-haiku-5-5"])
-    gem0, son0, gpt0, hai0 = (row_of(main, f"{LLM_NAMES['llm_' + m]} / zero-shot") for m in ["gemini-3.8-flash", "claude-sonnet-5-5", "gpt-6-luna", "claude-haiku-5-5"])
+    LLM3 = ["gemini-3.8-flash", "gpt-6-luna", "claude-haiku-5-5"]          # the LLMs of the study (Section 4.5)
+    gem, gpt, hai = (row_of(main, f"{LLM_NAMES['llm_' + m]} / RAG-10") for m in LLM3)
+    gem0, gpt0, hai0 = (row_of(main, f"{LLM_NAMES['llm_' + m]} / zero-shot") for m in LLM3)
+    zs, rg = [gem0, gpt0, hai0], [gem, gpt, hai]
     qwen = row_of(main, "Qwen3-Embedding-4B"); xlmr = row_of(main, "XLM-R base fine-tuned"); muse = row_of(main, "distiluse")
     e5b = row_of(main, "multilingual-e5-base /")
     llm_rows = main[main["group"] == "LLM"] if main is not None else None
@@ -103,9 +114,26 @@ def build(R):
     defer = R["deferral"]
     d_best = row_of(defer, "BERTurk fine-tuned") if defer is not None else None
     d_lex = row_of(defer, "TF-IDF") if defer is not None else None
+    d_emb = row_of(defer, rep_emb["system"]) if defer is not None and rep_emb is not None else None
     casc = R["cascade"]
-    cg = ex.get("cascade", {}).get("Cascade BERTurk -> Gemini", {}); cs = ex.get("cascade", {}).get("Cascade BERTurk -> Sonnet", {})
+    cg = ex.get("cascade", {}).get("Cascade BERTurk -> Gemini", {})
+    cgpt = ex.get("cascade", {}).get("Cascade BERTurk -> GPT", {}); chai = ex.get("cascade", {}).get("Cascade BERTurk -> Haiku", {})
     knn = ex.get("knn10_vote", {})
+    seeds = ex.get("berturk_seed_sensitivity", {})
+    boot = ex.get("macro_f1_difference_bootstrap", {})
+    def bd(a, b):
+        """Paired-bootstrap macro-F1 difference a - b in points with its 95% interval."""
+        r = boot.get(f"{a} | {b}")
+        if r is None:
+            return PENDING
+        sg = lambda v: f"{100*v:+.1f}".replace("-", "−")
+        return f"{sg(r['diff'])} points, 95% CI [{sg(r['ci'][0])}, {sg(r['ci'][1])}]"
+    def pfmt(p):
+        return "p < 0.001" if p < 0.001 else f"p = {p:.2f}" if p >= 0.1 else f"p = {p:.3f}"
+    deid = R["deid"]
+    LEXN = ex.get("lexical_representative", lex["system"] if lex is not None else "")     # name of the lexical representative in extra_stats
+    _plan = ex.get("rag_prompts_asked_again", {}).get("rag10__test")     # RAG prompts asked again after the retrieval moved to de-identified text
+    rr_share = _plan["changed"] / _plan["documents"] if _plan else None
     mce = R["mcnemar_extra"]
     def mcp(a, b):
         """p-value (uncorrected) of an extra McNemar test, formatted."""
@@ -114,8 +142,7 @@ def build(R):
         r = mce[((mce["system_a"] == a) & (mce["system_b"] == b)) | ((mce["system_a"] == b) & (mce["system_b"] == a))]
         if not len(r):
             return PENDING
-        p = float(r.iloc[0]["p_value"])
-        return "p < 0.001" if p < 0.001 else f"p = {p:.2f}" if p >= 0.1 else f"p = {p:.3f}"
+        return pfmt(float(r.iloc[0]["p_value"]))
     mc = R["mcnemar"]
     def mcp_rep(a, b):
         r = mc[(mc["system_a"].str.contains(a, regex=False) & mc["system_b"].str.contains(b, regex=False)) |
@@ -133,7 +160,10 @@ def build(R):
     from llm import LLM_DIR, model_info, read_records       # noqa: E402
     usd_total = {}                                           # every API call of the study (test, validation, re-requests)
     for f in LLM_DIR.glob("*.jsonl"):
-        m = f.stem.split("__")[0]; _, pin, pout = model_info(m)
+        m = f.stem.split("__")[0]
+        if m not in LLM3:                                    # responses of models that are not part of the study
+            continue
+        _, pin, pout = model_info(m)
         usd_total[m] = usd_total.get(m, 0.0) + sum(r["in_tokens"] * pin + r["out_tokens"] * pout for r in read_records(f)) / 1e6
     abl_all = R["ablations"]
     cal, hie, rs = R["calibration"], R["hierarchical"], R["rs"]
@@ -146,44 +176,50 @@ def build(R):
     classes = st["class_counts"]
     maj = max(classes.values()) / n_docs
     meta = {
-        "title": "Confidence-aware routing of institutional documents in electronic document management systems: "
-                 "a leakage-controlled benchmark of lexical, embedding, fine-tuned and large language model classifiers",
-        "authors": "Kurban Kotan^{a,*}, Serdar Kırışoğlu^{b}",
-        "affiliations": [
-            "^{a} Department of Artificial Intelligence and Machine Learning, Faculty of Computer and Information Sciences, Manisa Celal Bayar University, 45140 Manisa, Türkiye",
-            "^{b} Department of Computer Engineering, Faculty of Engineering, Düzce University, 81620 Düzce, Türkiye",
-        ],
-        "corresponding": "* Corresponding author. E-mail: kurban.kotan@cbu.edu.tr",
+        "title": S.TITLE,
+        "authors": "" if ANON else ", ".join(a["name"] + "^{" + a["aff"] + (",*" if a["corresponding"] else "") + "}" for a in S.AUTHORS),
+        "affiliations": [] if ANON else [f"^{{{k}}} {v}" for k, v in S.AFFILIATIONS.items()],
+        "corresponding": "" if ANON else f"* Corresponding author. E-mail: {S.EMAIL}",
+        "creator": "Anonymous" if ANON else "; ".join(a["name"] for a in S.AUTHORS),
     }
     B = []
 
     # ---------------------------------------------------------------- highlights & abstract
+    abl0 = R["ablation_lexical"]
+    def acc_of(rep):
+        r = abl0[abl0["representation"] == rep] if abl0 is not None else []
+        return float(r.iloc[0]["accuracy"]) if len(r) else np.nan
+    tr_drop = 100 * (acc_of("tfidf_content_tr") - acc_of("tfidf_content_en"))           # translation cost of the lexical model (points)
+    local_mf1_max = float(main.loc[main["group"] != "LLM", "macro_f1"].max())
+    zs_lo, zs_hi = min(r["accuracy"] for r in zs), max(r["accuracy"] for r in zs)
+    rg_lo, rg_hi = min(r["accuracy"] for r in rg), max(r["accuracy"] for r in rg)
     highlights = [
-        f"Routing of {n_docs:,} Turkish EDMS documents evaluated on a chronological, leak-free test",
-        "Machine translation to English lowers routing accuracy by about five points",
-        "Retrieved past documents, not unit descriptions, make LLMs the most accurate",
+        f"Routing of {n_docs:,} de-identified Turkish EDMS documents on a chronological test",
+        f"TF-IDF on native Turkish text rivals fine-tuned BERTurk; translation costs {tr_drop:.0f} points",
+        f"Retrieved past documents lift LLM routing accuracy from {100*zs_lo:.0f}–{100*zs_hi:.0f}% to {100*rg_lo:.0f}–{100*rg_hi:.0f}%",
         f"A BERTurk-to-LLM cascade reaches {pct(cg.get('test_accuracy'))}% with LLM calls for {100*cg.get('llm_share', 0):.0f}% of documents",
         f"Back-off to department offices leaves only {100*hb95['test_staff_share']:.0f}% of documents to staff",
     ]
     assert all(len(h) <= 85 for h in highlights), [len(h) for h in highlights]     # Elsevier limit
     B.append({"type": "highlights", "items": highlights})
-    B.append({"type": "abstract", "keywords": "Electronic document management; document routing; text classification; Turkish; sentence embeddings; selective prediction; large language models",
+    B.append({"type": "abstract", "keywords": "Electronic document management; document routing; Turkish text classification; large language models; selective prediction; sentence embeddings",
               "text": (
-        f"Routing incoming documents to the organisational unit that must act on them is still a manual step in many electronic document "
+        f"Routing incoming documents to the organisational unit that must act on them remains manual in many electronic document "
         f"management systems (EDMS). This study treats routing as decision support and evaluates it on {n_docs:,} documents of a Turkish "
-        f"university with {n_cls} target units. The evaluation is chronological (training up to 2021, validation and test on the two halves of "
+        f"university with {n_cls} target units. The evaluation is chronological (training up to 2021, validation and test in "
         f"2022), all choices are made on validation data, and macro-averaged metrics with bootstrap intervals and McNemar tests are reported. "
-        f"Term frequency–inverse document frequency (TF-IDF) models on Turkish text, eleven frozen sentence encoders with classical classifiers, "
-        f"fine-tuned BERTurk and XLM-RoBERTa, and four large language models (LLMs) prompted zero-shot or with ten retrieved past documents on "
-        f"de-identified text are compared. Retrieval-augmented LLMs were the most accurate single systems (up to {pct(gem['accuracy'])}% accuracy "
-        f"and {f3(gem['macro_f1'])} macro-F1), whereas zero-shot LLMs reached only {pct(min(hai0['accuracy'], gpt0['accuracy']))}–"
-        f"{pct(son0['accuracy'])}%. The best local models, fine-tuned BERTurk and a frozen Qwen3 embedding with a support vector machine, reached "
-        f"{pct(ft['accuracy'])}–{pct(qwen['accuracy'])}% and the TF-IDF baseline {pct(lex['accuracy'])}%. A grouped cross-validation gave "
-        f"{ex['cv_minus_test_accuracy_points']['min']:.0f}–{ex['cv_minus_test_accuracy_points']['max']:.0f} points more than the chronological test, "
-        f"and machine translation to English lowered accuracy by five points. A cascade that passes the {100*cg['llm_share']:.0f}% least confident "
-        f"documents from BERTurk to an LLM reached {pct(cg['test_accuracy'])}% accuracy at a quarter of the LLM cost. Temperature scaling halved "
-        f"the calibration error, and backing off to the department office left only {100*hb95['test_staff_share']:.0f}% of documents to staff, "
-        f"although validation thresholds lost up to three points on the test half-year. Code, splits and predictions are released.")})
+        f"Term frequency–inverse document frequency (TF-IDF) models on Turkish text, eleven frozen sentence encoders, "
+        f"fine-tuned BERTurk and XLM-RoBERTa, and three large language models (LLMs) prompted zero-shot or with ten retrieved past documents "
+        f"are compared, all on de-identified text. Retrieval raised LLM accuracy from {pct(zs_lo)}–{pct(zs_hi)}% to {pct(rg_lo)}–{pct(rg_hi)}%; "
+        f"the best LLM had the highest macro-F1 ({f3(gem['macro_f1'])} against at most {f3(local_mf1_max)} for local models), but its accuracy "
+        f"({pct(gem['accuracy'])}%) did not differ significantly from a frozen Qwen3 embedding with a support vector machine "
+        f"({pct(qwen['accuracy'])}%). Fine-tuned BERTurk ({pct(ft['accuracy'])}%) and the TF-IDF baseline ({pct(lex['accuracy'])}%) had practically "
+        f"equal macro-F1. Grouped cross-validation gave up to {ex['cv_minus_test_accuracy_points']['max']:.1f} points more than the chronological test, "
+        f"and machine translation to English lowered TF-IDF accuracy by {tr_drop:.1f} points. A cascade passing the {100*cg['llm_share']:.0f}% "
+        f"least confident documents from BERTurk to the LLM reached {pct(cg['test_accuracy'])}% at {100*cg['llm_share']:.0f}% of the LLM "
+        f"cost. Temperature scaling halved the calibration error, and backing off to the department office left {100*hb95['test_staff_share']:.0f}% "
+        f"of documents to staff at a 95% target, although validation thresholds lost up to three points on the test half-year. Code, splits and "
+        f"predictions are released.")})
 
     # ---------------------------------------------------------------- 1 introduction
     B.append(H(1, "1. Introduction"))
@@ -215,11 +251,12 @@ def build(R):
         "confidence-based deferral to staff and an optional LLM second stage. The main contributions are as follows."))
     B.append({"type": "numbered", "id": "", "items": [
         f"A documented construction of a document-level routing dataset from an EDMS dispatch log ({st['n_dispatch_records_raw']:,} records, "
-        f"{n_docs:,} documents, {n_cls} units), with an explicit treatment of broadcast circulars, multi-unit dispatch chains, duplicate texts and the label-consistency ceiling of the data.",
+        f"{n_docs:,} documents, {n_cls} units), with an explicit treatment of broadcast circulars, multi-unit dispatch chains, duplicate texts and the label-consistency ceiling of the data, "
+        "and a de-identification step after which every model sees only de-identified text.",
         "A leakage-controlled evaluation protocol: chronological train/validation/test partitions, validation-only model selection, grouped cross-validation "
         "in which identical texts never cross folds, bootstrap confidence intervals, McNemar tests and macro-averaged, per-unit and hierarchical (department-level) metrics.",
         "A controlled comparison of four classifier families under identical conditions (TF-IDF, eleven frozen sentence encoders, two fine-tuned "
-        "encoders and four LLMs), including the lexical baseline that earlier work omitted, with ablations of Turkish preprocessing (raw, stemming, "
+        "encoders and three LLMs), including the lexical baseline that earlier work omitted, with ablations of Turkish preprocessing (raw, stemming, "
         "Zeyrek lemmatisation), input fields, machine translation and sender-unit context.",
         "A confidence-aware routing framework that turns the classifier into decision support: top-k suggestions, selective automation with thresholds "
         "chosen on validation data, and a cost- and latency-aware cascade whose low-confidence documents are passed to a retrieval-augmented LLM on de-identified text.",
@@ -297,13 +334,15 @@ def build(R):
 
     # ---------------------------------------------------------------- 3 problem and data
     B.append(H(1, "3. Problem definition and dataset"))
-    B.append(H(2, "3.1. Routing in the EDMS of Düzce University"))
+    B.append(H(2, "3.1. Routing in the EDMS of " + ("a Turkish public university" if ANON else "Düzce University")))
     B.append(P(
-        "Düzce University operates a nationwide-standard EDMS in which every official document is registered with a subject line (*EvrakKonusu*) and a body "
+        ("The university" if ANON else "Düzce University") + " operates a nationwide-standard EDMS in which every official document is registered with a subject line (*EvrakKonusu*) and a body "
         "(*EvrakIcerigi*) and then dispatched by a user to one or more recipients, each dispatch being recorded with its sender unit, recipient unit, "
         "recipient role (*for action* or *for information*) and timestamp. The data used here are the dispatch records of the Information Technologies "
-        "Department (BİDB) and the Health, Culture and Sports Department (SKS), their sub-units (şube müdürlükleri) and the Rectorate, exported with "
-        "institutional ethics approval and covering documents dated from October 2019 to December 2022. The two departments form a two-level hierarchy "
+        "Department (BİDB) and the Health, Culture and Sports Department (SKS), their sub-units (şube müdürlükleri) and the Rectorate, exported for "
+        f"this study and covering the dispatches recorded from {pd.Timestamp(st['dispatch_time_min']):%B %Y} to "
+        f"{pd.Timestamp(st['dispatch_time_max']):%B %Y} ({small(st['n_documents_registered_before_dispatch_period'])} of the documents had been registered "
+        "in the last months of 2019). The two departments form a two-level hierarchy "
         "(department office and four to six sub-units each), and the Rectorate appears both as a sender that forwards documents downwards and as the "
         "addressee of documents sent upwards."))
     B.append(P(
@@ -355,32 +394,46 @@ def build(R):
         f"identical text in the training partition; they are kept because recurring forms are part of the real routing workload, and the grouped "
         f"cross-validation of Section 4.6 provides the complementary estimate in which no identical text crosses a fold boundary."))
     if cc is not None:
-        rows = [[SHORT[r["unit"]] + f" ({r['department']})", f"{r['train']:,}", f"{r['val']:,}", f"{r['test']:,}", f"{r['total']:,}", f"{r['share_%']:.1f}"] for _, r in cc.iterrows()]
+        rows = [[SHORT[r["unit"]] + (f" ({r['department']})" if r["department"] != "Rektörlük" else ""), f"{r['train']:,}", f"{r['val']:,}", f"{r['test']:,}", f"{r['total']:,}", f"{r['share_%']:.1f}"] for _, r in cc.iterrows()]
         B.append({"type": "table", "caption": "⟦T:classes⟧. Documents per target unit and chronological partition (BİDB: Information Technologies Department; SKS: Health, Culture and Sports Department).",
                   "columns": ["Target unit", "Train", "Validation", "Test", "Total", "Share (%)"], "col_widths": [0.4, 0.12, 0.12, 0.12, 0.12, 0.12], "font_size": 16, "rows": rows})
     B.append(fig_block("fig_dataset", "⟦F:dataset⟧. (a) Documents per target unit; (b) monthly document volume with the boundaries of the chronological partitions."))
     B.append(H(2, "3.4. Ethics, privacy and availability"))
     B.append(P(
-        "The export was obtained with the approval of the university's ethics board for research use. The records contain names of staff and of third "
-        "parties in subject lines and bodies, so the dataset cannot be released publicly; the released repository contains the construction script, the "
-        "document identifiers of every partition and fold, all prediction files, and the de-identification procedure, so that the experiments can be "
-        "reproduced by anyone with access to the export and the evaluation can be audited without it. Texts sent to external LLM services were "
-        "de-identified beforehand (Section 4.5), in line with the Turkish Personal Data Protection Law No. 6698 (Republic of Türkiye, 2016); no personal data left the "
-        "institution's infrastructure for any local model."))
+        "The records contain names of staff and of third parties in subject lines and bodies, so the dataset cannot be released publicly; the released "
+        "code contains the construction script, the document identifiers of every partition and fold, all prediction files, and the de-identification "
+        "procedure, so that the experiments can be reproduced by anyone with access to the export and the evaluation can be audited without it. The "
+        "export was provided by the university for anonymised use in academic work (see the Ethics statement). For this study it was stored and "
+        "processed on cloud services: Google Drive and Google Colab for the experiments, and the cloud workspace of the AI assistant named in the "
+        "declaration on generative AI. To limit the disclosure of personal data (Republic of Türkiye, 2016), all reported models were trained and "
+        "queried on de-identified text (Section 4.2), and only de-identified text was sent to the external LLM services; the English variant of "
+        "Section 4.2 re-uses machine translations of the document bodies produced with an online translation service in the earlier study."))
 
     # ---------------------------------------------------------------- 4 framework
     B.append(H(1, "4. Proposed framework"))
     B.append(H(2, "4.1. Overview"))
     B.append(P(
-        "⟦F:pipeline⟧ shows the framework. The data layer produces the document table and the partitions of Section 3. The representation layer maps a document "
+        "⟦F:pipeline⟧ shows the framework. The data layer produces the de-identified document table and the partitions of Section 3. The representation layer maps a document "
         "to a vector with one of three families: lexical TF-IDF features on Turkish-native preprocessing variants, frozen sentence encoders, or an encoder "
         "fine-tuned end to end. The decision layer trains a classifier (or uses the fine-tuned head) and outputs a ranked list of units with a confidence "
         "score. The routing layer uses the confidence: documents above a threshold are routed automatically (with the top-k list as suggestion), documents "
         "below it are either shown to staff or, in the cascade variant, passed to an LLM that sees the de-identified document together with similar past "
         "documents and their units. All thresholds are chosen on the validation partition."))
     B.append(fig_block("fig_pipeline", "⟦F:pipeline⟧. The confidence-aware routing framework. Solid arrows: data flow; the dashed arrow marks documents whose confidence is too low for any automatic decision."))
-    B.append(H(2, "4.2. Turkish-native preprocessing"))
+    B.append(H(2, "4.2. De-identification and Turkish-native preprocessing"))
     prep = R["prep"]
+    dt_ = deid.get("text", {})
+    B.append(P(
+        "*De-identification.* All text fields are de-identified before any representation is computed. Person names in the subject and body are "
+        "replaced by the placeholder [KİŞİ] (person) with a Turkish named-entity recogniser (savasy/bert-base-turkish-ner-cased), and e-mail "
+        "addresses, telephone numbers and 11-digit national identity numbers by [E-POSTA], [TELEFON] and [TCKN] with regular expressions. In the "
+        f"concatenated subjects and bodies, {dt_.get('[KİŞİ]', 0):,} names were replaced, and {deid.get('documents_with_a_person_name', 0):,} of the "
+        f"{n_docs:,} documents ({pct(deid.get('documents_with_a_person_name', 0) / n_docs)}%) contained at least one; {dt_.get('[E-POSTA]', 0)} e-mail "
+        f"addresses, {dt_.get('[TELEFON]', 0)} telephone numbers and {dt_.get('[TCKN]', 0)} identity numbers were masked. The English translations "
+        "used below are masked with the names found in the Turkish original and, in addition, by an English recogniser (dslim/bert-base-NER; "
+        "placeholder [PERSON]). The de-identified text is the only input of every reported model, of the retrieval of examples for the LLM prompts "
+        "and of the LLMs themselves. For the lexical models each placeholder is mapped to a reserved token, so that the presence of a name remains "
+        "available as a feature but not its identity."))
     B.append(P(
         "Three lexical variants are produced from the concatenated subject and body. *Raw*: Turkish-aware lower-casing (İ→i, I→ı), removal of all "
         "non-letter characters (dates, numbers and identifiers carry no routing information), and removal of the 53 NLTK Turkish stop words extended by "
@@ -390,8 +443,8 @@ def build(R):
         f"taken. The variants differ in vocabulary size (raw {prep.get('raw', 0):,}, stem {prep.get('stem', 0):,}, lemma {prep.get('lemma', 0):,} types on the "
         "full corpus), which quantifies the sparsity that morphology introduces. Stemming and lemmatisation are thus distinct operations: the former truncates "
         "surface forms by rules, the latter returns dictionary forms through morphological analysis. A fourth variant, *English*, re-uses the Google-Translate "
-        "output of the earlier study for the document body; it is evaluated on the body only, against the Turkish body processed identically, so that the "
-        "effect of translation is isolated. Contextual encoders receive the cleaned text with its original casing and punctuation, because their sub-word "
+        "output of the earlier study for the document body, de-identified as described above; it is evaluated on the body only, against the Turkish body "
+        "processed identically, so that the effect of translation is isolated. Contextual encoders receive the cleaned text with its original casing and punctuation, because their sub-word "
         "tokenisers were trained on natural text and stemming would destroy the forms they expect."))
     B.append(H(2, "4.3. Representations"))
     B.append(P(
@@ -432,9 +485,9 @@ def build(R):
         "interpretable: logistic regression (LR), support vector machines (Cortes & Vapnik, 1995) with a linear kernel on the sparse TF-IDF features and "
         "an RBF kernel on the dense embeddings, k-nearest neighbours with cosine distance (KNN), random forest (Breiman, 2001) (RF), decision tree (DT) "
         "and naive Bayes (complement NB for sparse, Gaussian NB for dense features). Dense features are standardised before the linear and kernel models. "
-        "A linear SVM on dense features was run for the first two encoders as a pilot: its solver needed up to 20 minutes per fit for the larger "
-        "regularisation values, and its validation macro-F1 was within 0.011 of LR and clearly below the RBF SVM (MiniLM 0.418 vs 0.429 and 0.484; "
-        "distiluse 0.416 vs 0.414 and 0.484), so on dense features the linear family is represented by LR. ⟦T:grid⟧ gives the search grid; the "
+        "In a pilot on the first two encoders, a linear SVM on dense features needed up to 20 minutes per fit for the larger regularisation values "
+        "and reached a validation macro-F1 within about 0.01 of LR and clearly below the RBF SVM, so on dense features the linear family is "
+        "represented by LR. ⟦T:grid⟧ gives the search grid; the "
         "regularisation strength and the class weighting (none or inverse frequency) are the hyper-parameters that matter most. For every representation "
         "and family the configuration with the highest validation macro-F1 is kept, and the family with the highest validation macro-F1 is the "
         "representation's *selected system*. Test results are reported for all families, but every claim about a representation refers to its selected "
@@ -462,7 +515,8 @@ def build(R):
         "summarises how well confidence separates correct from incorrect decisions, and the operating point for a target accuracy (90% or 95% on the "
         "automatically routed documents) is the largest validation coverage that meets the target. The corresponding threshold is then applied unchanged "
         "to the test partition, which gives an honest estimate of the automation rate and of the accuracy on the automated share. For the fine-tuned "
-        "BERTurk, the deferral, calibration, back-off and cascade analyses use the predictions of the first of its three seeds (seed 0)."))
+        "BERTurk, the deferral, calibration, back-off and cascade analyses and the McNemar tests use the predictions of the first of its three seeds "
+        "(seed 0); Section 5.4 reports how the tests change with the other two seeds."))
     B.append(P(
         "*Calibration.* A threshold expressed as a probability is meaningful only if confidences are calibrated. A single temperature T is therefore "
         "fitted on the validation predictions by minimising the negative log-likelihood (temperature scaling; Guo et al., 2017) and applied to the test "
@@ -487,22 +541,22 @@ def build(R):
         "partition, and asks for the three most likely units as JSON. In the *zero-shot* mode the model sees only the document; in the "
         "*retrieval-augmented* mode (rag10) it also sees the ten most similar documents of the training pool (TF-IDF cosine similarity; the pool is the "
         "training partition for validation documents and training plus validation for test documents) together with the units they were dispatched to. "
-        "Before any text is sent, person names are replaced by a placeholder with a Turkish named-entity recogniser (bert-base-turkish-ner-cased), and "
-        "e-mail addresses, telephone numbers and identity numbers are masked by patterns; the same de-identified text is used for the retrieved examples."))
+        "Both the document and the retrieved examples are given in their de-identified form (Section 4.2), and the retrieval itself is computed on the "
+        "de-identified texts."))
     B.append(P(
-        "Four models of three providers were queried through their public APIs in November 2026: Claude Haiku 5.5 and Claude Sonnet 5.5 (Anthropic), "
-        "GPT-6 Luna (OpenAI) and Gemini 3.8 Flash (Google). Extended reasoning was switched off for all of them: thinking budget 0 and temperature 0 for "
-        "Gemini; reasoning effort *none* and a strict JSON schema whose items are restricted to the unit names for GPT-6 Luna; thinking disabled for "
-        "Claude Haiku; and, for Claude Sonnet 5.5, which does not accept disabled thinking, the setting that allows thinking only between tool calls, "
-        "i.e. none in a request without tools. Claude and GPT used the provider-default sampling temperature, and outputs were limited to 300 tokens. "
+        "Three models of three providers were queried through their public APIs in November 2026: Claude Haiku 5.5 (Anthropic), GPT-6 Luna (OpenAI) "
+        "and Gemini 3.8 Flash (Google). Extended reasoning was switched off for all of them: thinking budget 0 and temperature 0 for Gemini; reasoning "
+        "effort *none* and a strict JSON schema whose items are restricted to the unit names for GPT-6 Luna; and thinking disabled for Claude Haiku. "
+        "Claude and GPT used the provider-default sampling temperature, and outputs were limited to 300 tokens. "
         "The first JSON object in the answer is parsed; a returned name that is not one of the units (accent-insensitive string similarity below 0.85, "
         "e.g. a personnel department outside the list) is discarded, and a document whose answer contains no valid unit (a truncated output, a refusal, "
         "or only units outside the list, mostly for documents whose de-identified text is little more than a name placeholder) is requested again, up "
-        "to three times; if no valid unit is obtained, the majority unit of the training data is predicted. In a first pass, Claude Sonnet ran with its "
-        "default adaptive thinking, which produced hidden reasoning for 739 of 5,281 requests (identified by output-token counts well above the length of "
-        "the visible answer) and exhausted the output budget on most of them; these requests were repeated without thinking, so that every reported "
-        "answer, as for the other models, was produced without extended reasoning. All calls, including repeated ones, are counted in the costs, and "
-        "the effective setting is stored with every response."))
+        "to three times; if no valid unit is obtained, the majority unit of the training data is predicted. In a first run, the examples of the "
+        "retrieval-augmented prompts were selected by a retrieval index built on the original text, while the prompts themselves already contained "
+        "only de-identified text; after the index had been rebuilt on the de-identified text, every prompt whose examples or their order changed "
+        f"({pct(rr_share)}% of the test prompts) was asked again, and only the answers to the final prompts are reported. A fourth model, Claude Sonnet 5.5, took part in the first run only; it could not be "
+        "queried again within the budget of the study and is therefore not reported. All calls, including repeated ones, are counted in the costs, "
+        "and the effective setting is stored with every response."))
     B.append(P(
         "*Cascade.* The cascade is evaluated as in Chen et al. (2023): documents are sent to the LLM in increasing order of local confidence, the share "
         "sent is chosen on the validation partition (the smallest share whose validation accuracy is within one point of the LLM alone, and the share "
@@ -539,16 +593,18 @@ def build(R):
     B.append(H(1, "5. Results"))
     env = json.loads((RES / "environment.json").read_text()) if (RES / "environment.json").exists() else {}
     B.append(P(
-        "*Experimental setup.* Lexical models and classifier grids were run on CPU"
+        "*Experimental setup.* Models were trained and evaluated on Google Colab: lexical models and classifier grids on CPU"
         + (f" ({env.get('cpu_count', '?')} cores)" if env else "")
-        + "; embedding extraction, fine-tuning and de-identification used "
-        + (f"an {env.get('gpu', 'NVIDIA GPU')}" if env.get("gpu") else "a GPU (Google Colab)")
+        + ", embedding extraction, fine-tuning and de-identification on "
+        + (f"a {env.get('gpu')} GPU" if env.get("gpu") else "a GPU")
         + "; LLMs were accessed through their public APIs"
         + (f" in {env.get('date', 'November 2026')}" if env else "")
         + ". Fine-tuning used 16-bit mixed precision; the classifier grids of the frozen encoders ran as four parallel jobs with two threads each. "
         + "Software: Python " + env.get("python", "3.x") + ", scikit-learn " + env.get("sklearn", "1.x") + ", PyTorch " + env.get("torch", "2.x")
         + ", Transformers " + env.get("transformers", "4.x/5.x") + ", sentence-transformers " + env.get("sentence_transformers", "3.x")
-        + ". All random seeds are fixed and listed in the repository. The LLM experiments, including validation runs and repeated requests, cost "
+        + ". All random seeds are fixed and listed in the released code, which was written with the assistance of an AI coding assistant (Claude, "
+        + "Anthropic; see the declaration on generative AI) under the authors' direction. The LLM experiments with the three reported models, "
+        + "including validation runs, the first run of Section 4.5 and repeated requests, cost "
         + f"USD {sum(usd_total.values()):.2f} at list prices."))
     B.append(H(2, "5.1. Main comparison"))
     if main is not None:
@@ -566,30 +622,39 @@ def build(R):
         sp_tc = ex.get("spearman_test_vs_cv_accuracy", {}); sp_vt = ex.get("spearman_val_vs_test_macro_f1", {}); gap = ex.get("cv_minus_test_accuracy_points", {})
         ftr = pd.read_csv(RES / "results_ft.csv")
         ft_sd = 100 * ftr[ftr["representation"] == "ft_bert-base-turkish-cased"]["accuracy"].std(ddof=1)
+        n_emb_below = int((emb_rows["accuracy"] < lex["accuracy"]).sum()) if emb_rows is not None else 0
+        top5 = main.loc[main["group"] != "LLM", "macro_f1"].nlargest(5)
+        drop = (main["val_macro_f1"] - main["macro_f1"]); big = main.loc[drop.idxmax()]
         B.append(P(
-            f"⟦T:main⟧ and ⟦F:main⟧ summarise the main comparison; the full grid with every classifier family is given in Appendix A. Retrieval-augmented "
-            f"LLMs were the most accurate systems. Gemini 3.8 Flash reached the highest test accuracy, {pct(gem['accuracy'])}% (95% CI {ci(gem['accuracy_ci'])}), "
-            f"and macro-F1, {pct(gem['macro_f1'])}% (CI {ci(gem['macro_f1_ci'])}); Claude Sonnet 5.5, which had the highest validation macro-F1 and is "
-            f"therefore the final system under the protocol, reached {pct(son['accuracy'])}% and {pct(son['macro_f1'])}%, and the two do not differ "
-            f"significantly ({mcp('Sonnet RAG', 'Gemini RAG')}). Among the local models, the fine-tuned BERTurk had the highest validation and test "
-            f"macro-F1 ({pct(ft['accuracy'])}% accuracy, {pct(ft['macro_f1'])}% macro-F1, mean of three seeds with a standard deviation of "
-            f"{ft_sd:.1f} points in accuracy), and the largest frozen encoder, Qwen3-Embedding-4B with an RBF SVM, the highest test accuracy "
-            f"({pct(qwen['accuracy'])}%, macro-F1 {pct(qwen['macro_f1'])}%); these two do not differ significantly either "
-            f"({mcp('BERTurk fine-tuned', 'Qwen3-Embedding-4B / RBF-SVM')}). The lexical system selected on validation, {lex['system']}, reached "
-            f"{pct(lex['accuracy'])}% and {pct(lex['macro_f1'])}%, i.e. {100*(ft['accuracy']-lex['accuracy']):.1f}–{100*(qwen['accuracy']-lex['accuracy']):.1f} "
-            f"accuracy points and {100*(ft['macro_f1']-lex['macro_f1']):.1f} macro-F1 points below the best local encoders. Fine-tuned XLM-R ({pct(xlmr['accuracy'])}%, {pct(xlmr['macro_f1'])}%) stayed below BERTurk, and several frozen encoders, among "
-            f"them the distilled multilingual USE that was the best model of the earlier study ({pct(muse['accuracy'])}%, {pct(muse['macro_f1'])}%), "
-            f"were no better than TF-IDF. The gap between accuracy and macro-F1 is large for every system, which reflects the skewed class distribution: "
-            f"the three smallest units contribute little to accuracy but a quarter of the macro average."))
+            f"⟦T:main⟧ and ⟦F:main⟧ summarise the main comparison; the full grid with every classifier family is given in Appendix A. The "
+            f"retrieval-augmented Gemini 3.8 Flash had the highest validation macro-F1 ({f3(gem['val_macro_f1'])}) and is therefore the final system "
+            f"under the protocol; it also had the highest test accuracy, {pct(gem['accuracy'])}% (95% CI {ci(gem['accuracy_ci'])}), and macro-F1, "
+            f"{pct(gem['macro_f1'])}% (CI {ci(gem['macro_f1_ci'])}). GPT-6 Luna and Claude Haiku 5.5 with retrieval reached {pct(gpt['accuracy'])}% and "
+            f"{pct(hai['accuracy'])}% ({pct(gpt['macro_f1'])}% and {pct(hai['macro_f1'])}% macro-F1). Among the local models, the fine-tuned BERTurk had "
+            f"the highest validation and test macro-F1 ({pct(ft['accuracy'])}% accuracy, {pct(ft['macro_f1'])}% macro-F1, mean of three seeds with a "
+            f"standard deviation of {ft_sd:.1f} points in accuracy), and the largest frozen encoder, Qwen3-Embedding-4B with an RBF SVM, the highest "
+            f"test accuracy ({pct(qwen['accuracy'])}%, macro-F1 {pct(qwen['macro_f1'])}%), only {100*(gem['accuracy']-qwen['accuracy']):.1f} points "
+            f"below Gemini. The lexical system selected on validation, {lex['system']}, reached {pct(lex['accuracy'])}% and {pct(lex['macro_f1'])}%, "
+            f"i.e. {100*(ft['accuracy']-lex['accuracy']):.1f}–{100*(qwen['accuracy']-lex['accuracy']):.1f} accuracy points below the best local "
+            f"encoders and with practically the same macro-F1 as BERTurk. Fine-tuned XLM-R ({pct(xlmr['accuracy'])}%, {pct(xlmr['macro_f1'])}%) "
+            f"stayed below BERTurk, and {small(n_emb_below)} of the {len(emb_rows)} frozen encoders, among them the distilled multilingual USE that was the "
+            f"best model of the earlier study ({pct(muse['accuracy'])}%, {pct(muse['macro_f1'])}%), were less accurate than TF-IDF. The gap between "
+            f"accuracy and macro-F1 is large for every system, which reflects the skewed class distribution: the three smallest units contribute "
+            f"little to accuracy but a quarter of the macro average. The five best local models lie within {100*(top5.max()-top5.min()):.1f} "
+            f"macro-F1 points of each other ({f3(top5.min())}–{f3(top5.max())}), whereas Gemini is {100*(gem['macro_f1']-local_mf1_max):.1f} points "
+            f"above the best of them; with an accuracy close to that of Qwen3-Embedding-4B, its advantage therefore lies mainly in the smaller units "
+            f"(Section 5.3)."))
         B.append(P(
             f"Grouped cross-validation accuracies exceed the chronological test accuracies by {gap.get('min', 0):.1f}–{gap.get('max', 0):.1f} points "
             f"(median {gap.get('median', 0):.1f}) for the local systems, which quantifies the temporal drift that a random split would hide; the ranking "
             f"of the systems is nevertheless very similar under both estimates (Spearman ρ = {sp_tc.get('rho', 0):.2f} over {sp_tc.get('n', 0)} systems). "
-            f"Validation and test macro-F1 agree less closely (ρ = {sp_vt.get('rho', 0):.2f} over {sp_vt.get('n', 0)} systems). The clearest case is the "
-            f"frozen-encoder configuration with the highest validation macro-F1, {rep_emb['system']} ({f3(rep_emb['val_macro_f1'])}), which fell to "
-            f"{f3(rep_emb['macro_f1'])} on the test half-year, the largest drop of any system; this is consistent with distance-weighted nearest-neighbour "
-            f"decisions that copy the labels of recurring forms from the preceding months. It is reported as the selected frozen encoder nonetheless, "
-            f"because replacing it by a configuration that looks better on the test partition would reintroduce the selection bias the protocol avoids."))
+            f"Validation and test macro-F1 agree less closely (ρ = {sp_vt.get('rho', 0):.2f} over {sp_vt.get('n', 0)} systems). The clearest case is "
+            f"{big['system'].replace(' / RAG-10', ' with retrieval')}, whose validation macro-F1 ({f3(big['val_macro_f1'])}) was almost that of Gemini "
+            f"({f3(gem['val_macro_f1'])}) but which fell to {f3(big['macro_f1'])} on the test half-year, the largest drop of any system. The frozen "
+            f"encoder selected on validation, {rep_emb['system']} ({f3(rep_emb['val_macro_f1'])} on validation, {f3(rep_emb['macro_f1'])} on test), "
+            f"kept its macro-F1 but is {100*(qwen['accuracy']-rep_emb['accuracy']):.1f} accuracy points below Qwen3-Embedding-4B; it is reported as "
+            f"the representative of its family nonetheless, because replacing it by a configuration that looks better on the test partition would "
+            f"reintroduce the selection bias the protocol avoids."))
     B.append(fig_block("fig_main", "⟦F:main⟧. Test-partition accuracy (a) and macro-F1 (b) of the selected systems with 95% bootstrap intervals; vertical ticks mark the grouped cross-validation mean."))
     B.append(H(2, "5.2. Preprocessing, input fields and translation"))
     abl = R["ablation_lexical"]
@@ -611,23 +676,35 @@ def build(R):
         """Row of the (lexical and encoder) ablation table whose system name contains the string."""
         r = abl_all[abl_all["system"].str.contains(contains, regex=False)] if abl_all is not None else None
         return r.iloc[0] if r is not None and len(r) else None
+    allc0 = R["all_configurations"]
+    raw_svm = allc0[allc0["system"] == "TF-IDF word (raw) / LinearSVM"] if allc0 is not None else []
+    raw_svm_acc = pct(raw_svm.iloc[0]["accuracy"]) if len(raw_svm) else PENDING
+    e_tr, e_en = E("paraphrase-multilingual-mpnet-base [content only"), E("all-mpnet-base-v2")
+    dc = deid.get("content", {}); de = deid.get("content_en", {})
     B.append(P(
         f"⟦T:ablation⟧ and ⟦F:ablation⟧ report the lexical ablations (accuracy / macro-F1 on the test partition). Stemming and lemmatisation reduce the "
         f"vocabulary by {100*(1-R['prep']['stem']/R['prep']['raw']):.0f}% and {100*(1-R['prep']['lemma']/R['prep']['raw']):.0f}%. On the chronological "
-        f"test, lemmatisation gave the highest lexical macro-F1 ({acc_mf(a_lem)}) and stemming the highest accuracy ({acc_mf(a_stem)}), against "
-        f"{acc_mf(a_raw)} for the raw tokens (validation selected logistic regression for this variant; its linear-SVM configuration reached an accuracy "
-        f"similar to the stemmed one), so morphological normalisation is worth one to three points on new correspondence, a difference inside the "
-        f"bootstrap intervals; under grouped cross-validation the three variants lie within about one standard deviation of each other "
-        f"({cvs(a_lem)}, {cvs(a_stem)} and {cvs(a_raw)}). Character n-grams, which need no linguistic resource, reach {acc_mf(a_chr)} and are thus a "
-        f"practical alternative to a morphological analyser. The subject line alone yields {acc_mf(a_sub)}, because many subjects are form names "
-        f"(*Vekalet*, *Görevlendirme*, *Araç Tahsisi*), and the body alone {acc_mf(a_ctr)}; both together are needed for the best result, as the body carries "
-        f"the terms that distinguish sub-units of the same department. The translation ablation on identical bodies is unambiguous: the Turkish body "
-        f"processed natively reaches {acc_mf(a_ctr)} (CV {cvs(a_ctr)}), the machine-translated English body {acc_mf(a_cen)} (CV {cvs(a_cen)}; "
-        f"McNemar {mcp('TF-IDF body (TR)', 'TF-IDF body (EN, translated)')}). For sentence encoders the picture is the same: the multilingual mpnet "
-        f"encoder on the Turkish body reaches {acc_mf(E('paraphrase-multilingual-mpnet-base [content only'))}, the English all-mpnet-base-v2 on the "
-        f"translated body {acc_mf(E('all-mpnet-base-v2'))}. Translation therefore does not help and, for lexical features, clearly *lowers* routing "
-        f"accuracy, presumably because institutional terms, unit names and form titles are translated inconsistently; the translation step of the "
-        f"earlier pipeline adds cost and an external dependency for a loss."))
+        f"test, lemmatisation gave the highest lexical accuracy and macro-F1 ({acc_mf(a_lem)}), closely followed by stemming ({acc_mf(a_stem)}), "
+        f"against {acc_mf(a_raw)} for the raw tokens (validation selected logistic regression for this variant; its linear-SVM configuration reached "
+        f"{raw_svm_acc}%, close to the stemmed one). Under grouped cross-validation, stemming and lemmatisation are indistinguishable ({cvs(a_lem)} "
+        f"and {cvs(a_stem)}) and about two points above the raw tokens ({cvs(a_raw)}), so morphological normalisation is worth about two points on "
+        f"new correspondence, whereas the choice between the rule-based stemmer and the morphological analyser does not matter. Character n-grams, "
+        f"which need no linguistic resource, reach {acc_mf(a_chr)} and are thus a practical alternative to a morphological analyser. The subject line "
+        f"alone yields {acc_mf(a_sub)}, because many subjects are form names (*Vekalet*, *Görevlendirme*, *Araç Tahsisi*), and the body alone "
+        f"{acc_mf(a_ctr)}; both together are needed for the best result, as the body carries the terms that distinguish sub-units of the same "
+        f"department. The translation ablation on identical bodies is clear for the lexical model: the Turkish body processed natively reaches "
+        f"{acc_mf(a_ctr)} (CV {cvs(a_ctr)}), the machine-translated English body {acc_mf(a_cen)} (CV {cvs(a_cen)}; McNemar "
+        f"{mcp('TF-IDF body (TR)', 'TF-IDF body (EN, translated)')}). For sentence encoders the result is mixed and not significant: the English "
+        f"all-mpnet-base-v2 on the translated body was {100*(e_en['accuracy']-e_tr['accuracy']):.1f} points more accurate than the multilingual "
+        f"mpnet encoder on the Turkish body ({pct(e_en['accuracy'])}% against {pct(e_tr['accuracy'])}%; McNemar "
+        f"{mcp('mpnet body (TR, multilingual)', 'mpnet body (EN, translated)')}) but {100*(e_tr['macro_f1']-e_en['macro_f1']):.1f} points lower "
+        f"in macro-F1 ({pct(e_en['macro_f1'])} against {pct(e_tr['macro_f1'])}; paired bootstrap, Turkish minus "
+        f"English: {bd('mpnet body (TR, multilingual)', 'mpnet body (EN, translated)')}), and this comparison changes the encoder together with the language. "
+        f"The English recogniser also inserted more placeholders than the Turkish one ({de.get('[PERSON]', 0):,} against {dc.get('[KİŞİ]', 0):,} "
+        f"names in the bodies), so the translations lose somewhat more words to de-identification, which may account for part of the difference. "
+        f"Translation therefore does not help: it lowers the accuracy of the lexical model, presumably because institutional terms, unit names "
+        f"and form titles are translated inconsistently, it does not improve an encoder consistently, and it adds cost and an external dependency "
+        f"to the pipeline."))
     sr = A("tfidf_word_lemma+sender"); base = A("tfidf_word_lemma")
     if sr is not None:
         e5s, e5n = E("multilingual-e5-base + sender"), e5b
@@ -645,6 +722,18 @@ def build(R):
     B.append(fig_block("fig_ablation", "⟦F:ablation⟧. Ablations of preprocessing, input field, translation and sender context (test partition; accuracy and macro-F1 in %)."))
     B.append(H(2, "5.3. Per-unit behaviour and confusion structure"))
     es = R["error_summary"]; cp = R["confused_pairs"]
+    pc0 = R["per_class"]; gain_sentence = ""
+    if pc0 is not None and len(pc0):                         # where the final system gains over the best local representative
+        fin = pc0[pc0["system"] == final["system"]].set_index("unit")
+        loc_best = pc0[pc0["system"] != final["system"]].groupby("unit")["f1"].max()
+        g = (fin["f1"] - loc_best).sort_values(ascending=False)
+        ok = [u for u in g.index if fin.loc[u, "support"] >= 10]
+        top, low = ok[:3], ok[::-1][:3]
+        def lst(us):
+            it = [f"{SHORT[u]} ({f3(fin.loc[u, 'f1'])} against {f3(loc_best[u])})" for u in us]
+            return ", ".join(it[:-1]) + " and " + it[-1] if len(it) > 1 else "".join(it)
+        gain_sentence = (" Compared with the best of the three local representatives on each unit, the final system gains most in F1 on "
+                         + lst(top) + ", and loses most on " + lst(low) + ".")
     if es is not None and len(es):
         e = es.iloc[0]
         B.append(P(
@@ -652,43 +741,74 @@ def build(R):
             f"{int(e['n_errors'])} errors on the {int(e['n_test']):,} test documents, {int(e['errors_within_department'])} "
             f"({pct(e['errors_within_department']/e['n_errors'])}%) stay inside the correct department and {int(e['errors_across_departments'])} cross "
             f"departments; department-level accuracy is {pct(e['department_accuracy'])}%. The most frequent confusions are "
-            + "; ".join(f"{r['true -> predicted']} ({r['count']})" for r in cp.head(5).to_dict('records')) + ". "
+            + "; ".join(f"{r['true -> predicted'].replace(' -> ', ' → ')} ({r['count']})" for r in cp.head(5).to_dict('records')) + ". "
             "Two structural sources of error stand out. First, the department offices (BİDB office, SKS office) receive documents that are forwarded to a "
             "sub-unit afterwards, so office and sub-unit labels describe the same kind of document at different points of the chain; the lenient accuracy of "
             "⟦T:main⟧, which accepts any unit that acted on the document, is consistently higher than the strict accuracy for this reason. Second, documents "
             "addressed to the Rectorate are mostly written *by* the Software Unit (reports and replies), so their text resembles Software Unit documents; this "
-            "confusion is inherent to labelling by recipient and would require the direction of the correspondence as an additional feature."))
-    B.append(fig_block("fig_confusion", "⟦F:confusion⟧. Confusion matrix of the final system (retrieval-augmented Claude Sonnet 5.5, selected on validation) on the test partition (rows: true unit with test support; colour: row-normalised share; orange frames: departments).", 5.6))
+            "confusion is inherent to labelling by recipient and would require the direction of the correspondence as an additional feature."
+            + gain_sentence))
+    B.append(fig_block("fig_confusion", f"⟦F:confusion⟧. Confusion matrix of the final system (retrieval-augmented {final['system'].split(' / ')[0]}, selected on validation) on the test partition (rows: true unit with test support; colour: row-normalised share; orange frames and brackets: departments).", 5.6))
     pc = R["per_class"]
     if pc is not None and len(pc):
         first = pc[pc["system"] == pc["system"].iloc[0]].sort_values("train_support", ascending=False)
         rows = [[SHORT[r.unit], f"{int(r.train_support):,}", f"{int(r.support)}", f"{100*r.precision:.1f}", f"{100*r.recall:.1f}", f"{100*r.f1:.1f}"] for r in first.itertuples()]
         B.append({"type": "table", "caption": f"⟦T:perclass⟧. Per-unit precision, recall and F1 of {pc['system'].iloc[0]} on the test partition (values in %; support: training / test documents).",
                   "columns": ["Unit", "Train n", "Test n", "Precision", "Recall", "F1"], "col_widths": [0.34, 0.12, 0.12, 0.14, 0.14, 0.14], "font_size": 16, "rows": rows})
-    B.append(fig_block("fig_perclass", "⟦F:perclass⟧. Per-unit F1 of the family representatives (selected on validation) on the test partition, ordered by training support."))
+    B.append(fig_block("fig_perclass", "⟦F:perclass⟧. Per-unit F1 of the family representatives (selected on validation; fine-tuned BERTurk: seed 0) on the test partition, ordered by training support."))
     B.append(H(2, "5.4. Statistical comparison"))
     mc = R["mcnemar"]
     if mc is not None and len(mc):
         def fp(p):
-            return "< 0.001" if p < 0.001 else f"{p:.3f}" if p < 0.01 else f"{p:.2f}"
-        rows = [[r.system_a, r.system_b, f"{100*r.acc_a:.1f} / {100*r.acc_b:.1f}", f"{int(r.n_a_only)} / {int(r.n_b_only)}", fp(r.p_value), fp(r.p_holm)] for r in mc.itertuples()]
-        B.append({"type": "table", "caption": "⟦T:mcnemar⟧. Exact McNemar tests between the family representatives (selected on validation) on the test partition. Discordant: documents correct only for A / only for B; p-values without and with Holm correction.",
+            return "< 0.001" if p < 0.001 else f"{p:.3f}" if p < 0.1 else f"{p:.2f}"
+        s0 = lambda n: n.replace("mean of 3 seeds", "seed 0")
+        rows = [[s0(r.system_a), s0(r.system_b), f"{100*r.acc_a:.1f} / {100*r.acc_b:.1f}", f"{int(r.n_a_only)} / {int(r.n_b_only)}", fp(r.p_value), fp(r.p_holm)] for r in mc.itertuples()]
+        B.append({"type": "table", "caption": "⟦T:mcnemar⟧. Exact McNemar tests between the family representatives (selected on validation) on the test partition (the fine-tuned BERTurk with its seed-0 predictions). Discordant: documents correct only for A / only for B; p-values without and with Holm correction.",
                   "columns": ["System A", "System B", "Acc. A / B (%)", "Discordant A / B", "p", "p (Holm)"], "col_widths": [0.26, 0.26, 0.14, 0.14, 0.1, 0.1], "font_size": 14, "rows": rows})
         if mce is not None and len(mce):
-            rows = [[r.system_a, r.system_b, f"{100*r.acc_a:.1f} / {100*r.acc_b:.1f}", f"{int(r.n_a_only)} / {int(r.n_b_only)}", fp(r.p_value), fp(r.p_holm)] for r in mce.itertuples()]
+            ar = lambda n: n.replace(" -> ", " → ")
+            rows = [[ar(r.system_a), ar(r.system_b), f"{100*r.acc_a:.1f} / {100*r.acc_b:.1f}", f"{int(r.n_a_only)} / {int(r.n_b_only)}", fp(r.p_value), fp(r.p_holm)] for r in mce.itertuples()]
             B.append({"type": "table", "caption": "⟦T:mcnemar_extra⟧. Further exact McNemar tests quoted in the text (test partition; Holm correction within this table). "
-                      "kNN-10 vote: majority unit of the ten retrieved documents shown in the RAG prompt; cascades as in ⟦T:cascade⟧; body-only TF-IDF for the translation test.",
+                      "BERTurk fine-tuned: seed 0; kNN-10 vote: majority unit of the ten retrieved documents shown in the RAG prompt; cascades as in ⟦T:cascade⟧; "
+                      "body-only TF-IDF and mpnet encoders for the translation tests.",
                       "columns": ["System A", "System B", "Acc. A / B (%)", "Discordant A / B", "p", "p (Holm)"], "col_widths": [0.26, 0.26, 0.14, 0.14, 0.1, 0.1], "font_size": 14, "rows": rows})
         sig = mc[mc["p_holm"] < 0.05]
+        nsig = mc[mc["p_holm"] >= 0.05]
+        s_keys = sorted(seeds)
+        sv = lambda k, n: pfmt(seeds[k][f"p_vs_{n}"]) if k in seeds else PENDING
+        sacc = lambda k: pct(seeds[k]["accuracy"]) if k in seeds else PENDING
+        bs12 = ex.get("macro_f1_difference_bootstrap_without_smallest_unit", {})
+        def bd12(a, b):
+            r = bs12.get(f"{a} | {b}")
+            if r is None:
+                return PENDING
+            sg = lambda v: f"{100*v:+.1f}".replace("-", "−")
+            return f"{sg(r['diff'])} points, 95% CI [{sg(r['ci'][0])}, {sg(r['ci'][1])}]"
+        hs_f1 = pc0.loc[(pc0["system"] == final["system"]) & (pc0["unit"] == bs12.get("excluded_unit")), "f1"] if pc0 is not None else []
         B.append(P(
             f"⟦T:mcnemar⟧ lists the tests between the family representatives and ⟦T:mcnemar_extra⟧ the further comparisons quoted in the text. "
-            f"{'All ' + str(len(mc)) if len(sig) == len(mc) else str(len(sig)) + ' of the ' + str(len(mc))} representative comparisons remain significant after Holm correction; in particular, the retrieval-augmented "
-            f"Sonnet is more accurate than the fine-tuned BERTurk ({mcp_rep('Claude Sonnet', 'BERTurk')}), and both are more accurate than the "
-            f"TF-IDF representative. Differences of one to two points within a family, by contrast, are not distinguishable from sampling variation on a "
-            f"test partition of {sp['test']:,} documents: Sonnet and Gemini ({mcp('Sonnet RAG', 'Gemini RAG')}), Gemini and GPT-6 Luna "
-            f"({mcp('Gemini RAG', 'GPT RAG')} before correction), and BERTurk and Qwen3-Embedding-4B ({mcp('BERTurk fine-tuned', 'Qwen3-Embedding-4B / RBF-SVM')}). "
-            "These tests, together with the overlapping bootstrap intervals in ⟦F:main⟧, are the basis on which the conclusions of Section 6 are "
-            "restricted to differences that the data actually support."))
+            f"{'All ' + small(len(mc)) if len(sig) == len(mc) else small(len(sig)).capitalize() + ' of the ' + small(len(mc))} representative comparisons are significant "
+            f"after Holm correction: the retrieval-augmented Gemini is more accurate than each local representative, and the fine-tuned BERTurk and "
+            f"the TF-IDF model are both more accurate than the multilingual-E5 representative"
+            + (f", whereas BERTurk and TF-IDF do not differ ({mcp_rep('BERTurk', 'TF-IDF')})" if len(nsig) else "") + ". "
+            f"Among the LLMs, Gemini was also more accurate than GPT-6 Luna ({mcp('Gemini RAG', 'GPT RAG')}) and Claude Haiku "
+            f"({mcp('Gemini RAG', 'Haiku RAG')}). Three qualifications apply. First, in accuracy Gemini did not differ from the best frozen encoder, "
+            f"Qwen3-Embedding-4B ({mcp('Gemini RAG', 'Qwen3-Embedding-4B / RBF-SVM')}), which is not a family representative because multilingual-E5 "
+            f"large had the higher validation macro-F1; the advantage of Gemini lies in macro-F1, where a paired bootstrap over the test documents "
+            f"gives {bd('Gemini RAG', 'Qwen3-Embedding-4B / RBF-SVM')} against Qwen3-Embedding-4B, {bd('Gemini RAG', 'BERTurk fine-tuned')} against "
+            f"BERTurk and {bd('Gemini RAG', LEXN)} against TF-IDF, while BERTurk and TF-IDF differ by {bd('BERTurk fine-tuned', LEXN)}. Second, part of "
+            f"this macro-F1 advantage comes from the Health Services Unit, whose single test document Gemini routed correctly (F1 "
+            f"{f3(float(hs_f1.iloc[0])) if len(hs_f1) else PENDING}) and the local models did not; without this unit, the advantage is "
+            f"{bd12('Gemini RAG', 'Qwen3-Embedding-4B / RBF-SVM')} against Qwen3-Embedding-4B and {bd12('Gemini RAG', 'BERTurk fine-tuned')} against "
+            f"BERTurk, smaller but still significant. Third, the comparisons with BERTurk depend on the seed: with seed 1 "
+            f"({sacc(s_keys[1]) if len(s_keys) > 1 else PENDING}% accuracy) the conclusions are those of seed 0, but with seed 2 "
+            f"({sacc(s_keys[2]) if len(s_keys) > 2 else PENDING}%) BERTurk was more accurate than TF-IDF "
+            f"({sv(s_keys[2], LEXN) if len(s_keys) > 2 else PENDING}) and no longer differed significantly from Qwen3-Embedding-4B "
+            f"({sv(s_keys[2], 'Qwen3-Embedding-4B / RBF-SVM') if len(s_keys) > 2 else PENDING}) or Gemini "
+            f"({sv(s_keys[2], 'Gemini RAG') if len(s_keys) > 2 else PENDING}, both before correction). Differences of one to two points between "
+            f"the best local models are therefore not robust on a test partition of {sp['test']:,} documents. These tests, together with the "
+            "overlapping bootstrap intervals in ⟦F:main⟧, are the basis on which the conclusions of Section 6 are restricted to differences that the "
+            "data actually support."))
     B.append(H(2, "5.5. Top-k suggestion and deferral to staff"))
     if defer is not None and len(defer):
         rows = [[r.system.replace("mean of 3 seeds", "seed 0"), f"{r.AURC:.3f}", f"{100*r.accuracy_full:.1f}", f"{100*r['coverage@90']:.1f}", f"{100*r['accuracy@90']:.1f}", f"{100*r['coverage@95']:.1f}", f"{100*r['accuracy@95']:.1f}"]
@@ -697,14 +817,16 @@ def build(R):
                   "Coverage@90/95: share of test documents routed automatically with the threshold chosen on validation for a 90% / 95% target accuracy; "
                   "Accuracy@90/95: accuracy actually obtained on that share.",
                   "columns": ["System", "AURC", "Acc. (all)", "Cov.@90", "Acc.@90", "Cov.@95", "Acc.@95"], "col_widths": [0.34, 0.1, 0.11, 0.11, 0.11, 0.11, 0.12], "font_size": 15, "rows": rows})
-        knn_d = row_of(defer, "KNN")
+        a_ft, a_lx = f"{d_best['AURC']:.3f}", f"{d_lex['AURC']:.3f}"
+        aurc_txt = f"both {a_ft}" if a_ft == a_lx else f"{a_ft} and {a_lx}"
         B.append(P(
             f"⟦T:deferral⟧ and ⟦F:deferral⟧a show the local family representatives (LLM answers carry no comparable confidence score). Confidence is "
-            f"informative for the fine-tuned and the lexical model: errors concentrate in the low-confidence tail, and the best AURC was obtained by "
-            f"{'the fine-tuned BERTurk' if 'BERTurk fine-tuned' in defer.sort_values('AURC').iloc[0]['system'] else defer.sort_values('AURC').iloc[0]['system']} "
-            f"({defer['AURC'].min():.3f}), followed by the TF-IDF model ({d_lex['AURC']:.3f}). The "
-            f"distance-weighted nearest-neighbour classifier assigns a confidence of one to many documents and ranks them worst "
-            f"({knn_d['AURC']:.3f}). With the threshold chosen on validation for a 95% target, the fine-tuned BERTurk routed "
+            f"informative for the fine-tuned and the lexical model: errors concentrate in the low-confidence tail, and the two reach practically the "
+            f"same AURC ({aurc_txt}). The RBF SVM on multilingual-E5 large ranks the documents much worse "
+            f"({d_emb['AURC']:.3f}): its one-versus-rest scores are derived from pairwise votes, and for most documents the top unit leads the "
+            f"second by about one vote, so the scores separate correct from incorrect decisions poorly, and the threshold chosen on validation for a "
+            f"90% target routed only {pct(d_emb['coverage@90'])}% of the test documents, at {pct(d_emb['accuracy@90'])}%. With the threshold chosen on "
+            f"validation for a 95% target, the fine-tuned BERTurk routed "
             f"{pct(d_best['coverage@95'])}% of the test documents automatically at {pct(d_best['accuracy@95'])}% accuracy, and {pct(d_best['coverage@90'])}% "
             f"at {pct(d_best['accuracy@90'])}% for a 90% target; the TF-IDF model routed {pct(d_lex['coverage@95'])}% at {pct(d_lex['accuracy@95'])}% and "
             f"{pct(d_lex['coverage@90'])}% at {pct(d_lex['accuracy@90'])}%. The thresholds of the lexical model thus held within one point on the next half-year, whereas "
@@ -719,7 +841,7 @@ def build(R):
             return f"{100*c:.1f} / {100*a:.1f}" if not pd.isna(a) else f"{100*c:.1f} / –"
         rows = []
         for _, r in cal.iterrows():
-            nm = "BERTurk fine-tuned" if r["system"].startswith("BERTurk") else "TF-IDF (stem) + linear SVM"
+            nm = "BERTurk fine-tuned (seed 0)" if r["system"].startswith("BERTurk") else r["system"]
             for i, t in enumerate((90, 95)):
                 rows.append([nm if i == 0 else "", f"{r['temperature']:.2f}" if i == 0 else "",
                              f"{r['ece_test_before']:.3f} → {r['ece_test_after']:.3f}" if i == 0 else "", f"{t}%",
@@ -731,6 +853,9 @@ def build(R):
                   "April–June 2022 only.",
                   "columns": ["System", "T", "ECE (test)", "Target", "Empirical", "Calibrated", "Recent quarter"],
                   "col_widths": [0.25, 0.07, 0.15, 0.08, 0.15, 0.15, 0.15], "font_size": 15, "rows": rows})
+        def reach(c, t):
+            a = 100 * c[f"rec_acc@{t}"]
+            return f"to the {t}% target" if a >= t else f"to within {t - a:.1f} points of the {t}% target"
         B.append(P(
             f"⟦T:calib⟧ and ⟦F:routing⟧a summarise calibration. The fine-tuned BERTurk was over-confident (T = {cb_['temperature']:.2f}): temperature "
             f"scaling roughly halved its calibration error, from {cb_['ece_test_before']:.3f} to {cb_['ece_test_after']:.3f} on the test half-year "
@@ -745,13 +870,13 @@ def build(R):
             f"{pct(d_best['accuracy@95'])}% with the raw scores (⟦T:deferral⟧). The calibrated rule held the 90% target for BERTurk "
             f"({pct(cb_['cal_cov@90'])}% of the documents routed at {pct(cb_['cal_acc@90'])}%) but not the 95% target ({pct(cb_['cal_cov@95'])}% at "
             f"{pct(cb_['cal_acc@95'])}%), so the highest confidences remained optimistic on the new half-year. Choosing the threshold on the most recent "
-            f"validation quarter made the lexical model meet both targets ({pct(ct_['rec_cov@90'])}% at {pct(ct_['rec_acc@90'])}%; "
-            f"{pct(ct_['rec_cov@95'])}% at {pct(ct_['rec_acc@95'])}%) at the price of coverage, whereas for BERTurk the "
+            f"validation quarter brought the lexical model {reach(ct_, 90)} and {reach(ct_, 95)} ({pct(ct_['rec_cov@90'])}% of the documents at "
+            f"{pct(ct_['rec_acc@90'])}% and {pct(ct_['rec_cov@95'])}% at {pct(ct_['rec_acc@95'])}%) at the price of coverage, whereas for BERTurk the "
             f"{rs['BERTurk fine-tuned']['n_val_recent']:,} documents of that quarter were too few to support a 95% threshold. Thresholds should "
             f"therefore be re-estimated regularly on recent documents, and with a margin."))
         rows = []
         for r in hie.itertuples():
-            nm = "BERTurk fine-tuned" if r.system.startswith("BERTurk") else "TF-IDF (stem) + linear SVM"
+            nm = "BERTurk fine-tuned (seed 0)" if r.system.startswith("BERTurk") else r.system
             rows.append([nm, f"{100*r.target:.0f}%", cc(r.test_unit_share, r.test_unit_acc), cc(r.test_dept_share, r.test_dept_acc),
                          f"{100*r.test_staff_share:.1f}", f"{100*r.test_dept_needs_forwarding:.1f}"])
         B.append({"type": "table", "caption": "⟦T:hier⟧. Hierarchical back-off on the test partition (calibrated probabilities; thresholds chosen on validation "
@@ -761,7 +886,7 @@ def build(R):
                   "columns": ["System", "Target", "Unit", "Department office", "Staff", "Forwarding"],
                   "col_widths": [0.3, 0.1, 0.16, 0.2, 0.1, 0.14], "font_size": 15, "rows": rows})
         short = max(100 * (r.target - min(r.test_unit_acc, r.test_dept_acc)) for r in hie.itertuples())
-        tdb = rs.get("BERTurk fine-tuned", {}); tdt = rs.get("TF-IDF (stem) + linear SVM", {})
+        tdb = rs.get("BERTurk fine-tuned", {}); tdt = rs.get(ct_["system"], {})
         B.append(P(
             f"The hierarchical back-off changes how much of the routing can be automated (⟦T:hier⟧, ⟦F:routing⟧b). With the thresholds chosen for "
             f"a 95% target, BERTurk routed {pct(hb95['test_unit_share'])}% of the test documents to their unit ({pct(hb95['test_unit_acc'])}% correct) "
@@ -780,7 +905,7 @@ def build(R):
                        "off to the department office, or left to staff, with thresholds chosen on validation for 90% and 95% target accuracy."))
     B.append(H(2, "5.7. LLM second stage and cascade"))
     if llm_rows is not None and len(llm_rows):
-        names = {"claude-haiku-5-5": "Claude Haiku 5.5", "claude-sonnet-5-5": "Claude Sonnet 5.5", "gpt-6-luna": "GPT-6 Luna", "gemini-3.8-flash": "Gemini 3.8 Flash"}
+        names = {"gemini-3.8-flash": "Gemini 3.8 Flash", "gpt-6-luna": "GPT-6 Luna", "claude-haiku-5-5": "Claude Haiku 5.5"}
         rows = []
         for mode, mlab in [("zeroshot", "zero-shot"), ("rag10", "RAG-10")]:
             for m, lab in names.items():
@@ -790,25 +915,26 @@ def build(R):
                 rows.append([f"{lab}, {mlab}", f"{pct(r['accuracy'])} {ci(r['accuracy_ci'])}", pct(r["macro_f1"]), pct(r["top3_accuracy"]),
                              f"{r['predict_ms_per_doc']:.0f}", usd(m, mode)])
         rows.append(["Vote of the 10 retrieved documents (no LLM)", f"{pct(knn.get('test_accuracy'))}", pct(knn.get("test_macro_f1")), "–", "–", "0"])
+        prices = "; ".join(f"{names[m].replace('Claude ', '').replace(' 5.5', '')} {model_info(m)[1]:.2f} / {model_info(m)[2]:.2f}" for m in names)
         B.append({"type": "table", "caption": "⟦T:llm⟧. Large language models on the test partition (de-identified text; accuracy with 95% bootstrap interval, values in %). "
                   "RAG-10: prompt with the ten most similar past documents and their units. Latency: median API time per document; cost at list prices "
-                  "(USD per million input / output tokens: Haiku 0.10 / 0.50, Sonnet 2 / 10, GPT-6 Luna 0.10 / 0.50, Gemini 3.8 Flash 0.75 / 3.75).",
+                  f"(USD per million input / output tokens: {prices}).",
                   "columns": ["Model, mode", "Accuracy", "Macro-F1", "Top-3", "Latency (ms)", "USD / 1,000 docs"], "col_widths": [0.32, 0.2, 0.12, 0.1, 0.12, 0.14], "font_size": 15, "rows": rows})
-        zs = [r for r in (gem0, son0, gpt0, hai0) if r is not None]; rg = [r for r in (gem, son, gpt, hai) if r is not None]
+        gains = [a["accuracy"] - b["accuracy"] for a, b in zip(rg, zs)]
         B.append(P(
             f"⟦T:llm⟧ reports the LLM results. In zero-shot mode, where the models know the units only through their descriptions, accuracy was "
-            f"{pct(min(r['accuracy'] for r in zs))}–{pct(max(r['accuracy'] for r in zs))}% and macro-F1 {pct(min(r['macro_f1'] for r in zs))}–"
-            f"{pct(max(r['macro_f1'] for r in zs))}%, well below the supervised systems: the boundaries between the sub-units are institutional conventions "
-            f"that cannot be inferred from duty descriptions alone. Retrieved examples raised the accuracy of every model by "
-            f"{100*min(a['accuracy'] - b['accuracy'] for a, b in zip(rg, zs)):.0f}–{100*max(a['accuracy'] - b['accuracy'] for a, b in zip(rg, zs)):.0f} "
-            f"points (GPT-6 Luna from {pct(gpt0['accuracy'])}% to {pct(gpt['accuracy'])}%), which made the retrieval-augmented mode the most accurate "
-            f"configuration of the study. The ten retrieved documents already form a nearest-neighbour classifier: the majority unit among them reaches "
-            f"{pct(knn.get('test_accuracy'))}% accuracy and {pct(knn.get('test_macro_f1'))}% macro-F1, so the LLMs add between "
-            f"{100*(hai['accuracy']-knn.get('test_accuracy', 0)):.0f} (Haiku) and {100*(gem['accuracy']-knn.get('test_accuracy', 0)):.0f} points "
-            f"(Gemini; {mcp('Gemini RAG', 'kNN-10 vote')}) by weighing the examples against the document and the unit descriptions. The larger Claude model "
-            f"helped mainly without retrieval (Sonnet {pct(son0['accuracy'])}% vs Haiku {pct(hai0['accuracy'])}% zero-shot; {pct(son['accuracy'])}% vs "
-            f"{pct(hai['accuracy'])}% with retrieval), and the cost per 1,000 documents differs by a factor of about thirty between GPT-6 Luna "
-            f"(USD {usd('gpt-6-luna')}) and Sonnet (USD {usd('claude-sonnet-5-5')}) with retrieval, for accuracies within one point of each other."))
+            f"{pct(zs_lo)}–{pct(zs_hi)}% and macro-F1 {pct(min(r['macro_f1'] for r in zs))}–{pct(max(r['macro_f1'] for r in zs))}%, below every "
+            f"supervised system of ⟦T:main⟧: the boundaries between the sub-units are institutional conventions that cannot be inferred from duty "
+            f"descriptions alone. Retrieved examples raised the accuracy of every model by {100*min(gains):.0f}–{100*max(gains):.0f} points (Gemini from "
+            f"{pct(gem0['accuracy'])}% to {pct(gem['accuracy'])}%, GPT-6 Luna from {pct(gpt0['accuracy'])}% to {pct(gpt['accuracy'])}%, Claude Haiku "
+            f"from {pct(hai0['accuracy'])}% to {pct(hai['accuracy'])}%). The ten retrieved documents already form a nearest-neighbour classifier: the "
+            f"majority unit among them reaches {pct(knn.get('test_accuracy'))}% accuracy and {pct(knn.get('test_macro_f1'))}% macro-F1, so the LLMs "
+            f"add between {100*(hai['accuracy']-knn.get('test_accuracy', 0)):.0f} (Haiku) and {100*(gem['accuracy']-knn.get('test_accuracy', 0)):.0f} "
+            f"points (Gemini; {mcp('Gemini RAG', 'kNN-10 vote')}) by weighing the examples against the document and the unit descriptions. With "
+            f"retrieval, the cost per 1,000 documents ranged from USD {usd('gpt-6-luna')} (GPT-6 Luna) and USD {usd('claude-haiku-5-5')} (Haiku) to "
+            f"USD {usd('gemini-3.8-flash')} (Gemini), so the most accurate model was also the most expensive by a factor of about "
+            f"{small(round(float(usd('gemini-3.8-flash')) / float(usd('gpt-6-luna'))))}, for {100*(gem['accuracy']-gpt['accuracy']):.1f} accuracy points and "
+            f"{100*(gem['macro_f1']-gpt['macro_f1']):.1f} macro-F1 points over GPT-6 Luna."))
     if casc is not None and len(casc):
         cb = casc[casc["local_system"].str.contains("BERTurk fine-tuned", regex=False)]
         rows = [[LLM_NAMES.get(r.llm.replace("__rag10", ""), r.llm), "within 1 pt of LLM" if r.rule.startswith("min") else "best val. accuracy",
@@ -816,22 +942,30 @@ def build(R):
         B.append({"type": "table", "caption": "⟦T:cascade⟧. Cascade from the fine-tuned BERTurk (seed 0) to a retrieval-augmented LLM on the test partition. The share of "
                   "documents sent to the LLM (those with the lowest BERTurk confidence) is chosen on validation by the rule in the second column; accuracies in %.",
                   "columns": ["LLM (RAG-10)", "Rule for the share", "LLM share (%)", "BERTurk alone", "LLM alone", "Cascade"], "col_widths": [0.24, 0.24, 0.13, 0.13, 0.13, 0.13], "font_size": 15, "rows": rows})
-        tg = casc[casc["local_system"].str.contains("TF-IDF", regex=False) & casc["llm"].str.contains("gemini") & (casc["rule"] == "best val accuracy")]
-        tg = tg.iloc[0] if len(tg) else None
+        def tg_(rule):
+            t = casc[casc["local_system"].str.contains("TF-IDF", regex=False) & casc["llm"].str.contains("gemini") & (casc["rule"] == rule)]
+            return t.iloc[0] if len(t) else None
+        tg, tg_min = tg_("best val accuracy"), tg_("min share within 1pt of LLM")
+        mins = cb[cb["rule"].str.startswith("min")]["llm_share"]
+        v_loc = cg.get("val_accuracy_local_alone", np.nan)
+        v_llm = [c.get("val_accuracy_llm_alone", np.nan) for c in (cg, cgpt, chai)]
         B.append(P(
             f"⟦T:cascade⟧ and ⟦F:deferral⟧b evaluate the cascade with the fine-tuned BERTurk as first stage. With the share chosen on validation, passing "
             f"the {100*cg['llm_share']:.0f}% least confident documents to Gemini 3.8 Flash gave {pct(cg['test_accuracy'])}% accuracy and "
             f"{pct(cg['test_macro_f1'])}% macro-F1, more than BERTurk alone ({mcp('Cascade BERTurk -> Gemini', 'BERTurk fine-tuned')}) and as much as "
             f"the LLM alone ({mcp('Cascade BERTurk -> Gemini', 'Gemini RAG')}), while the LLM cost fell from USD {cg['llm_usd_per_1000_docs_alone']:.2f} "
-            f"to {cg['llm_usd_per_1000_docs_cascade']:.2f} per 1,000 documents and the de-identified text of three quarters of the documents never left "
-            f"the institution. With Sonnet, the cascade reached {pct(cs['test_accuracy'])}% with a share of {100*cs['llm_share']:.0f}% "
-            f"(USD {cs['llm_usd_per_1000_docs_cascade']:.2f} instead of {cs['llm_usd_per_1000_docs_alone']:.2f} per 1,000 documents). The complementarity "
-            f"is visible in ⟦F:deferral⟧b: accuracy rises steeply while the first quarter of the documents is passed on and then declines towards the "
-            f"LLM's own accuracy, because the LLM is more accurate than BERTurk on the low-confidence documents and less accurate on the confident ones. "
-            f"The rule 'smallest share within one point of the LLM' selects no or almost no LLM calls here, because BERTurk alone was already within about "
-            f"one point of the LLMs on the validation half-year; it is informative for weaker first stages. A CPU-only first stage is also viable: with "
-            f"the TF-IDF model the cascade reached {pct(tg['test_accuracy']) if tg is not None else PENDING}% while sending "
-            f"{100*tg['llm_share'] if tg is not None else 0:.0f}% of the documents to Gemini."))
+            f"to {cg['llm_usd_per_1000_docs_cascade']:.2f} per 1,000 documents, and {100*(1-cg['llm_share']):.0f}% of the documents would not have to "
+            f"be sent to an external service. With GPT-6 Luna and Claude Haiku, the cascade reached {pct(cgpt['test_accuracy'])}% (share "
+            f"{100*cgpt['llm_share']:.0f}%) and {pct(chai['test_accuracy'])}% (share {100*chai['llm_share']:.0f}%), more than either LLM alone "
+            f"({pct(gpt['accuracy'])}% and {pct(hai['accuracy'])}%). The complementarity is visible in ⟦F:deferral⟧b: accuracy rises while the first "
+            f"two fifths of the documents are passed on and then declines towards the LLM's own accuracy, because the LLM is more accurate than BERTurk "
+            f"on the low-confidence documents and slightly less accurate on the confident ones. The rule 'smallest share within one point of the LLM' "
+            f"selects few or no LLM calls here ({100*mins.min():.0f}–{100*mins.max():.0f}%), because BERTurk alone was already close to the LLMs on the "
+            f"validation half-year ({pct(v_loc)}% against {pct(min(v_llm))}–{pct(max(v_llm))}%); it is informative for weaker first stages. A CPU-only "
+            f"first stage is also viable: with the TF-IDF model, sending {100*tg_min['llm_share'] if tg_min is not None else 0:.0f}% of the documents "
+            f"to Gemini (the smallest share within one point of the LLM on validation) gave {pct(tg_min['test_accuracy']) if tg_min is not None else PENDING}% "
+            f"and sending {100*tg['llm_share'] if tg is not None else 0:.0f}% (the best validation accuracy) "
+            f"{pct(tg['test_accuracy']) if tg is not None else PENDING}%."))
     B.append(H(2, "5.8. Computational cost"))
     cost = R["cost"]
     if cost is not None and len(cost):
@@ -853,111 +987,121 @@ def build(R):
         f"every new month of data trivial. Frozen encoders add a one-time encoding cost per document (tens of milliseconds on a GPU, hundreds on a CPU) "
         f"and a classifier that trains in seconds to about a minute; fine-tuning BERTurk took {ftc['fit_seconds_trainval']/60:.1f} minutes per run on "
         f"the GPU and inference {ftc['predict_ms_per_doc']:.1f} ms per document. LLM calls add a median latency of one to two seconds and a cost of "
-        f"USD {usd('gpt-6-luna')}–{usd('claude-sonnet-5-5')} per 1,000 documents with retrieval (⟦T:llm⟧), which the cascade reduces in proportion "
+        f"USD {usd('gpt-6-luna')}–{usd('gemini-3.8-flash')} per 1,000 documents with retrieval (⟦T:llm⟧), which the cascade reduces in proportion "
         f"to the share it sends. These figures are the basis of the deployment discussion below."))
 
     # ---------------------------------------------------------------- 6 discussion
     B.append(H(1, "6. Discussion"))
     B.append(H(2, "6.1. What the results support"))
+    tr_ = lambda v: f"{v:.0f}"
     B.append(P(
         "Four findings are robust to the choice of estimate (chronological test or grouped cross-validation) and to sampling variation. First, a lexical "
         "model on Turkish text is a strong baseline for institutional routing: the correspondence is templated, the discriminative information is lexical "
         "(form names, unit names, domain terms), and TF-IDF with a linear classifier captures it at negligible cost, "
-        f"{100*(ft['accuracy']-lex['accuracy']):.1f}–{100*(qwen['accuracy']-lex['accuracy']):.1f} accuracy points below the best local encoders. Any claim that a representation model improves routing must therefore be made against this baseline, which the earlier version of this "
-        "study and several related studies omit. Second, Turkish should be processed natively: machine translation lowered accuracy by about five points on "
-        "identical documents, whereas morphological normalisation changed it by at most three. Third, what makes LLMs useful for an institution-specific "
-        "label set is retrieval rather than model size or instructions: with unit descriptions alone they stayed below every supervised model, while ten "
-        "retrieved past documents made them the most accurate systems of the study, several points above the vote of the retrieved documents themselves. "
-        "Fourth, local confidence is informative: errors of the fine-tuned and lexical models concentrate in the low-confidence tail, which is what lets "
-        "a cascade reach the accuracy of the LLM while calling it for about a quarter of the documents."))
+        f"{100*(ft['accuracy']-lex['accuracy']):.1f}–{100*(qwen['accuracy']-lex['accuracy']):.1f} accuracy points below the best local encoders and "
+        "with practically the same macro-F1 as the fine-tuned BERTurk. Any claim that a representation model improves routing must therefore be made "
+        "against this baseline, which the earlier version of this study and several related studies omit. Second, Turkish should be processed "
+        f"natively: machine translation lowered the accuracy of the lexical model by {tr_drop:.1f} points on identical documents and did not help an "
+        "encoder consistently, whereas stemming and lemmatisation were interchangeable. Third, what makes LLMs useful for an institution-specific label "
+        "set is retrieval rather than instructions: with unit descriptions alone they stayed below every supervised model, while ten retrieved past "
+        f"documents raised them by {100*min(gains):.0f}–{100*max(gains):.0f} points, "
+        f"{100*(hai['accuracy']-knn.get('test_accuracy', 0)):.0f}–{100*(gem['accuracy']-knn.get('test_accuracy', 0)):.0f} points above the vote of "
+        "the retrieved documents themselves, and gave the best of them the highest macro-F1 of the study. Fourth, local confidence is informative: "
+        "errors of the fine-tuned and lexical models concentrate in the low-confidence tail, which is what lets a cascade match the accuracy of the "
+        f"LLM while calling it for {100*cg['llm_share']:.0f}% of the documents."))
     B.append(P(
-        "Two qualifications follow from the chronological design. Absolute confidence thresholds chosen on one half-year lost up to three points of "
-        "accuracy on the next, and validation-based selection picked a configuration (MiniLM with a nearest-neighbour classifier) that degraded on new "
-        "correspondence; both argue for periodic recalibration on recent documents rather than for a one-off model choice. The practical consequence is "
-        "that the useful question is not 'which model is most accurate?' but 'how many documents can be automated at the accuracy the institution "
-        "accepts, and what happens to the rest?'. The framework answers it with the top-3 suggestion, deferral to staff, the back-off to department "
-        f"offices and the LLM cascade; with the back-off, only {pct(hb90['test_staff_share'], 0)}–{pct(hb95['test_staff_share'], 0)}% of the "
-        "documents still need a manual first-level decision."))
+        "Three qualifications apply. Absolute confidence thresholds chosen on one half-year lost up to three points of accuracy on the next; "
+        f"validation macro-F1 ranked {big['system'].split(' / ')[0]} almost level with Gemini but overstated its test macro-F1 by "
+        f"{small(round(100*(big['val_macro_f1']-big['macro_f1'])))} points; and differences of one to two accuracy points between the best local models depend on "
+        "the seed of the fine-tuned model. The first two argue for periodic re-validation on recent documents rather than for a one-off model choice, "
+        "the third for reporting seed variation. The practical consequence is that the useful question is not 'which model is most accurate?' but "
+        "'how many documents can be automated at the accuracy the institution accepts, and what happens to the rest?'. The framework answers it with "
+        "the top-3 suggestion, deferral to staff, the back-off to department offices and the LLM cascade; with the back-off, only "
+        f"{pct(hb90['test_staff_share'], 0)}–{pct(hb95['test_staff_share'], 0)}% of the documents still need a manual first-level decision."))
     B.append(P(
         "Decision support also needs reasons that a dispatcher can check. The cascade supplies them without extra machinery: the retrieved past "
         "documents and their units, which the LLM sees, can be displayed with every suggestion as case-based evidence (Kenny et al., 2021), and the "
-        "lexical model is directly inspectable (Rudin, 2019). Inspection of its per-unit term weights shows mostly domain terms, such as *yemekhane* "
-        "(refectory) for Catering, *telefon* and *dış hat* (outside line) for Communications, *kantin* and *kira* (rent) for Social Facilities, and "
-        "*EBYS* and *transkript* for Software, but for several units also the first names of staff and of regular senders. The model thus partly "
-        "routes by who is involved rather than by what a document is about; this helps in practice but has to be weighed against privacy and against "
-        "changes of staff, and it is a further reason to retrain regularly. For the same reason the term lists are not reproduced in this paper."))
+        "lexical model is directly inspectable (Rudin, 2019), because every decision decomposes into the weights of the terms that the document "
+        "contains. De-identification matters here as well. Staff and regular senders recur across documents, so a model trained on the original "
+        "text can learn their names as routing cues; this helps as long as the same people handle the same matters, but it conflicts with privacy "
+        "and breaks when staff change. On de-identified text only the presence of a name, not its identity, is available to the models, and the "
+        "remaining cues are the form names, unit names and domain terms that a dispatcher would also use."))
     B.append(H(2, "6.2. Relation to previous findings"))
     B.append(P(
         f"The preliminary study on the same data reported 74.3% accuracy for a Universal Sentence Encoder with an SVM on a random split, after translation "
         f"to English. Its closest counterpart here, the distilled multilingual USE with an RBF SVM, reached {pct(muse['accuracy'])}% on the chronological "
         f"test and {pct(muse['cv_accuracy_mean'])}% in grouped cross-validation. The difference has three measurable sources: the chronological test is "
-        f"harder than a random split (grouped cross-validation, which still shuffles time, gives {gap.get('min', 0):.0f}–{gap.get('max', 0):.0f} points "
-        f"more), identical texts no longer cross partitions, and no configuration was selected on the test partition. Under grouped cross-validation the "
-        f"best encoders (Qwen3-Embedding-4B {pct(qwen['cv_accuracy_mean'])}%, multilingual-E5 base {pct(e5b['cv_accuracy_mean'])}%, fine-tuned BERTurk "
-        f"{pct(ft['cv_accuracy_mean'])}%) are at or slightly above the earlier figure, and on the chronological test only the cascade "
-        f"({pct(cg['test_accuracy'])}%) reaches it. The finding of the earlier study that contextual encoders outperform static embeddings is consistent "
+        f"harder than a random split (grouped cross-validation, which still shuffles time, gives up to {gap.get('max', 0):.1f} points more), "
+        f"identical texts no longer cross partitions, and no configuration was selected on the test partition; a fourth, not quantified here, is "
+        f"that person names are masked in the present study. Under grouped cross-validation the best encoders (Qwen3-Embedding-4B "
+        f"{pct(qwen['cv_accuracy_mean'])}%, multilingual-E5 base {pct(e5b['cv_accuracy_mean'])}%, fine-tuned BERTurk {pct(ft['cv_accuracy_mean'])}%) "
+        f"are slightly above the earlier figure, whereas on the chronological test no system reaches it; the cascade comes closest "
+        f"({pct(cg['test_accuracy'])}%). The finding of the earlier study that contextual encoders outperform static embeddings is consistent "
         f"with the present results, but its conclusion that lemmatisation removes the translation cost could not be supported by its implementation, which "
-        f"lemmatised the English translation; the controlled comparison here shows that translation is harmful rather than merely unnecessary. The results "
-        f"also agree with the ticket-routing literature: a thresholded lexical model with abstention is a strong, cheap and auditable policy (Gupta, 2026); "
-        f"fine-tuned encoders are among the most accurate supervised models (Alsaç et al., 2025; Karakaş & Şimşek, 2026), although a large frozen "
-        f"embedding model matched the fine-tuned BERTurk here; and zero-shot LLMs do not know institution-specific classes, whereas retrieval-augmented "
-        f"prompting turns them into the strongest classifiers of the comparison."))
+        f"lemmatised the English translation; the controlled comparison here shows that translation is harmful for the lexical model and of no "
+        f"consistent benefit for an encoder. The results also agree with the ticket-routing literature: a thresholded lexical model with abstention is "
+        f"a strong, cheap and auditable policy (Gupta, 2026); fine-tuned encoders are among the most accurate supervised models (Alsaç et al., 2025; "
+        f"Karakaş & Şimşek, 2026), although a large frozen embedding model was at least as accurate as the fine-tuned BERTurk here; and zero-shot "
+        f"LLMs do not know institution-specific classes, whereas retrieval-augmented prompting makes them competitive and, for the best model, the "
+        f"strongest classifier of the comparison in macro-F1."))
     B.append(H(2, "6.3. Limitations"))
+    hs_share = float(hs_f1.iloc[0]) / n_cls if len(hs_f1) else np.nan
     B.append(P(
         "The data come from two departments of a single university and from a single EDMS; the unit set, the share of templated correspondence and the "
         "label noise are institution-specific, and transfer to other institutions requires retraining and a new validation partition. Labels are the first "
         "dispatch recorded by staff and inherit their inconsistencies; the label-consistency ceiling of Section 3.3 bounds what any model can reach and "
-        "limits the interpretation of differences between the best systems. The hierarchy of units is used only for analysis, not for prediction; a "
-        "hierarchical classifier that first chooses the department could reduce cross-department errors. The Health Services Unit is too small to be "
-        "evaluated. A dedicated few-shot method such as SetFit (Tunstall et al., 2022) was not evaluated: with hundreds to thousands of labelled "
+        "limits the interpretation of differences between the best systems. The unit hierarchy enters only through the back-off and the top-down "
+        "decoding of flat classifiers (Section 5.6); classifiers trained hierarchically were not evaluated. The Health Services Unit is too small to "
+        f"be evaluated, yet its single test document moves macro-F1 by up to {small(round(100*hs_share))} points (Section 5.4). A dedicated few-shot method such "
+        "as SetFit (Tunstall et al., 2022) was not evaluated: with hundreds to thousands of labelled "
         "documents for the large units, full fine-tuning is the stronger instance of the same idea, and for the smallest units the retrieval-augmented "
         "LLM, which needs no training, plays the few-shot role; a learning-curve study with reduced labelled data would show where the approaches "
         "cross. The temperature used for calibration was fitted on the model trained without the validation documents and transferred to the "
-        "refitted model, which is an approximation. LLM results reflect specific model versions and prices at the time of the experiment, and each answer is a single sample (Gemini at "
-        "temperature 0, Claude and GPT at their default temperature), so repeated runs would vary slightly. The first Sonnet pass (Section 4.5) also shows "
-        "that provider defaults can change the configuration silently; the released response files therefore record the effective setting of every call. "
-        "The de-identification removes names but not every indirect identifier, so an institution deploying the cascade must assess the residual "
-        "disclosure risk under its own regulation; for the same reason, documents whose de-identified text consists of little more than a name "
-        "placeholder cannot be routed by an external LLM at all. Finally, "
-        "the cascade and the deferral are simulated on stored predictions; an operational study with dispatchers would be needed to measure the actual "
-        "reduction of processing time and of misrouting, which this paper does not claim."))
+        "refitted model, which is an approximation. LLM results reflect specific model versions and prices at the time of the experiment, and each "
+        "answer is a single sample (Gemini at temperature 0, Claude Haiku and GPT-6 Luna at their default temperature), so repeated runs would vary "
+        "slightly; Claude Sonnet 5.5 could not be included in the final comparison (Section 4.5). De-identification with a named-entity recogniser is "
+        "imperfect: it can miss names written in unusual forms and mask words that are not names, the English recogniser masked more spans than the "
+        "Turkish one (Section 5.2), and indirect identifiers remain, so an institution deploying the cascade must assess the residual disclosure risk "
+        "under its own regulation; documents whose de-identified text consists of little more than a name placeholder cannot be routed from their "
+        "text at all. Finally, the cascade and the deferral are simulated on stored predictions; an operational study with dispatchers would be "
+        "needed to measure the actual reduction of processing time and of misrouting, which this paper does not claim."))
 
     # ---------------------------------------------------------------- 7 conclusion
     B.append(H(1, "7. Conclusion"))
     B.append(P(
         f"This study reformulated the automatic routing of EDMS documents as a decision-support problem and evaluated it under a leakage-controlled, "
-        f"chronological protocol on {n_docs:,} Turkish documents with {n_cls} target units. A lexical baseline on natively processed Turkish text was "
-        f"only {100*(ft['accuracy']-lex['accuracy']):.1f}–{100*(qwen['accuracy']-lex['accuracy']):.1f} accuracy points below the best encoders; the fine-tuned BERTurk and a large frozen Qwen3 embedding were the most accurate local models "
-        f"({pct(ft['accuracy'])}% and {pct(qwen['accuracy'])}%); and LLMs were the most accurate systems overall (up to {pct(gem['accuracy'])}%) only "
-        f"when retrieved past documents compensated for the institution-specific class definitions. Machine translation, used in earlier work, lowered "
-        f"accuracy. Local confidence was informative enough to automate about a quarter of the routing at {pct(d_best['accuracy@95'], 0)}% accuracy, and "
-        f"a cascade that passes the least confident quarter of the documents to an LLM reached {pct(cg['test_accuracy'])}% accuracy at about a quarter "
-        f"of the LLM cost. Temperature scaling made the confidence of the fine-tuned model interpretable, and backing off to department offices "
-        f"reduced the documents that need a manual first-level decision to {pct(hb90['test_staff_share'], 0)}–{pct(hb95['test_staff_share'], 0)}%; "
-        f"thresholds chosen on one half-year lost up to three points on the next, so a deployment should recalibrate them regularly. "
-        f"Future work includes hierarchical routing over the organisational chart, sender and correspondence-direction features (the sender unit alone "
-        f"raised the accuracy of the lexical model by about ten points), on-premise open-weight LLMs for the second stage, and a prospective study of "
-        f"the framework in the dispatch workflow."))
+        f"chronological protocol on {n_docs:,} de-identified Turkish documents with {n_cls} target units. A lexical baseline on natively processed "
+        f"Turkish text was only {100*(ft['accuracy']-lex['accuracy']):.1f}–{100*(qwen['accuracy']-lex['accuracy']):.1f} accuracy points below the best "
+        f"encoders and matched the fine-tuned BERTurk in macro-F1; the fine-tuned BERTurk and a large frozen Qwen3 embedding were the most accurate "
+        f"local models ({pct(ft['accuracy'])}% and {pct(qwen['accuracy'])}%); and an LLM reached the highest accuracy and macro-F1 "
+        f"({pct(gem['accuracy'])}% and {f3(gem['macro_f1'])}) only when retrieved past documents compensated for the institution-specific class "
+        f"definitions, with a small accuracy advantage over the best local model and a clear one in macro-F1. Machine translation, used in earlier "
+        f"work, lowered the accuracy of the lexical model. Local confidence was informative enough to automate about a quarter of the routing at "
+        f"{pct(d_best['accuracy@95'], 0)}% accuracy, and a cascade that passes the {100*cg['llm_share']:.0f}% least confident documents to an LLM "
+        f"reached {pct(cg['test_accuracy'])}% accuracy at {100*cg['llm_share']:.0f}% of the LLM cost. Temperature scaling made the confidence of the "
+        f"fine-tuned model interpretable, and backing off to department offices reduced the documents that need a manual first-level decision to "
+        f"{pct(hb90['test_staff_share'], 0)}–{pct(hb95['test_staff_share'], 0)}%; thresholds chosen on one half-year lost up to three points on the "
+        f"next, so a deployment should recalibrate them regularly. Future work includes hierarchically trained routing models, sender and "
+        f"correspondence-direction features (the sender unit alone raised the accuracy of the lexical model by about "
+        f"{small(round(100*(sr['accuracy']-base['accuracy'])))} points), on-premise open-weight LLMs for the second stage, which would keep every document "
+        f"inside the institution, and a prospective study of the framework in the dispatch workflow."))
 
     # ---------------------------------------------------------------- declarations
-    B.append(H(1, "CRediT authorship contribution statement"))
-    B.append(P("**Kurban Kotan:** Conceptualization, Methodology, Software, Validation, Formal analysis, Investigation, Data curation, Writing – original draft, "
-               "Writing – review & editing, Visualization. **Serdar Kırışoğlu:** Conceptualization, Resources, Data curation, Investigation, Writing – review & editing, Project administration."))
+    # author contributions and funding are identifying: in the anonymized copy they appear on the title page only
+    if not ANON:
+        B.append(H(1, "CRediT authorship contribution statement"))
+        B.append(P(S.CREDIT))
     B.append(H(1, "Declaration of competing interest"))
-    B.append(P("The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper."))
-    B.append(H(1, "Funding"))
-    B.append(P("This research did not receive any specific grant from funding agencies in the public, commercial, or not-for-profit sectors."))
+    B.append(P(S.COMPETING))
+    if not ANON:
+        B.append(H(1, "Funding"))
+        B.append(P(S.FUNDING))
     B.append(H(1, "Ethics statement"))
-    B.append(P("The use of the EDMS records for this research was approved by the ethics board of Düzce University. Personal data were processed inside the institution; "
-               "texts sent to external services were de-identified as described in Section 4.5."))
+    B.append(P(S.ethics(ANON)))
     B.append(H(1, "Data and code availability"))
-    B.append(P("The source code of the complete pipeline (dataset construction, preprocessing, all models, evaluation, figures), the document identifiers of every partition "
-               "and fold, the hyper-parameters and seeds, the prediction files of every system and the LLM prompts are available at "
-               "https://github.com/kurbankotan/edms-nlp-routing. The raw EDMS export cannot be shared because it contains personal data; a de-identified sample for "
-               "reproduction of the pipeline is available from the corresponding author under the conditions of the ethics approval."))
-    B.append(H(1, "Declaration of generative AI and AI-assisted technologies in the writing process"))
-    B.append(P("During the preparation of this work the authors used Claude (Anthropic) to assist with code review, reference verification, formatting checks and "
-               "language editing. After using this tool, the authors reviewed and edited the content as needed and take full responsibility for the content of the publication."))
+    B.append(P(S.data(ANON)))
+    B.append(H(1, S.AI_TITLE))
+    B.append(P(S.AI))
 
     # ---------------------------------------------------------------- references
     B.append(H(1, "References"))
@@ -1099,10 +1243,11 @@ def main():
     R = load()
     M = number_blocks(build(R))
     OUT.mkdir(exist_ok=True)
-    (OUT / "manuscript.json").write_text(json.dumps(M, ensure_ascii=False, indent=1))
+    js, docx_out = (OUT / "manuscript_anon.json", OUT / "Manuscript_anonymized.docx") if ANON else (OUT / "manuscript.json", OUT / "Manuscript.docx")
+    js.write_text(json.dumps(M, ensure_ascii=False, indent=1))
     n_pending = json.dumps(M, ensure_ascii=False).count(PENDING)
-    subprocess.run(["node", str(OUT / "render_docx.js"), str(OUT / "manuscript.json"), str(OUT / "Manuscript.docx")], check=True)
-    print(f"pending placeholders: {n_pending}")
+    subprocess.run(["node", str(OUT / "render_docx.js"), str(js), str(docx_out)], check=True)
+    print(f"pending placeholders: {n_pending}; to be completed by the authors: {json.dumps(M, ensure_ascii=False).count('[[TO BE COMPLETED')}")
 
 
 if __name__ == "__main__":
