@@ -7,10 +7,11 @@ authors before submission (the renderer highlights it).
 """
 REPO_URL = "https://github.com/kurbankotan/edms-nlp-routing"
 ANON_ARCHIVE = "code_and_predictions_anonymized.zip"
+ANON_URL = "https://anonymous.4open.science/r/edms-routing-review"        # anonymized copy of the repository for the reviewers (anonymous.4open.science); empty: supplementary archive
 TBC = "[[TO BE COMPLETED BY THE AUTHORS: {}]]"
 
-TITLE = ("Confidence-aware routing of institutional documents in electronic document management systems: "
-         "a leakage-controlled benchmark of lexical, embedding, fine-tuned and large language model classifiers")
+TITLE = ("Confidence-aware hierarchical routing of institutional documents in electronic document management systems using local "
+         "classifiers and large language models")
 PREVIOUS_ID = "ESWA-D-26-37092"
 PREVIOUS_TITLE = ("Enhancement of document routing procedures in electronic document management systems through natural language "
                   "processing and machine learning algorithms")
@@ -62,8 +63,14 @@ def ethics(anon):
 
 
 def data(anon):
-    where = (f"provided to the reviewers as an anonymized supplementary archive ({ANON_ARCHIVE}); the address of the public repository is "
-             "given on the title page" if anon else f"available at {REPO_URL} under the MIT licence")
+    if anon and ANON_URL:
+        where = (f"available to the reviewers in an anonymized copy of the repository ({ANON_URL}); the address of the public repository "
+                 "is given on the title page")
+    elif anon:
+        where = (f"provided to the reviewers as an anonymized supplementary archive ({ANON_ARCHIVE}); the address of the public repository is "
+                 "given on the title page")
+    else:
+        where = f"available at {REPO_URL} under the MIT licence"
     return ("The source code of the complete pipeline (dataset construction, preprocessing, all models, evaluation, figures), the document "
             "identifiers of every partition and fold, the hyper-parameters and seeds, the prediction files of every system and the LLM prompts "
             "are " + where + ". The raw EDMS export cannot be shared because it contains personal data; requests for access to de-identified "

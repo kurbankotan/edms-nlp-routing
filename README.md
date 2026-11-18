@@ -25,6 +25,7 @@ src/
                       answer parsing and a second pass (--requery) for answers without a valid unit
   analysis.py         tables (results/tables.xlsx) and figures (figures/)
   routing.py          calibration (temperature scaling, ECE), deferral rules and hierarchical back-off to department offices
+  policy.py           LLM-informed hierarchical routing: fusion of the local posterior with the LLM's ranked answer, back-off, bootstrap
 paper/       extra_stats.py, make_manuscript.py + render_docx.js (manuscript generated from the result files)
 results/     dataset_stats.json, results_*.csv, preds/, preds_val/, val_grid/, ft_runs_v2/, tables/, llm/
 figures/
@@ -50,7 +51,7 @@ python src/embed.py && python src/run_emb_parallel.py    # frozen encoders (embe
 python src/finetune.py --cv                               # fine-tuned encoders (GPU)
 python src/llm.py --smoke && python src/llm.py            # needs API keys in the environment
 python src/llm.py --requery && python src/llm.py --summarise
-python src/analysis.py && python src/routing.py          # tables + figures, calibration and hierarchical routing
+python src/analysis.py && python src/routing.py && python src/policy.py   # tables + figures, calibration, routing policies
 python paper/extra_stats.py                               # further statistics quoted in the paper
 ```
 

@@ -1,0 +1,3 @@
+{
+  "note": "thresholds chosen on validation; bootstrap over test documents with fixed thresholds"
+}

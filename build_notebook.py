@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SRC_FILES = ["prepare_data.py", "deidentify.py", "preprocess.py", "common.py", "embed.py", "run_tfidf.py", "run_embeddings.py", "run_emb_parallel.py",
-             "finetune.py", "llm.py", "analysis.py", "routing.py"]
+             "finetune.py", "llm.py", "analysis.py", "routing.py", "policy.py"]
 PAPER_FILES = ["extra_stats.py"]          # statistics quoted in the manuscript (imports src/ modules)
 BASE = "/content/drive/MyDrive/ebys-routing"
 
@@ -285,6 +285,7 @@ code("""# === 12. Analiz: tablolar (results/tables.xlsx) ve şekiller (figures/)
 if RUN_ANALYSIS:
     run("python src/analysis.py", "analysis", check=False)
     run("python src/routing.py", "analysis", check=False)     # kalibrasyon ve hiyerarşik geri çekilme (tablolar + fig_routing)
+    run("python src/policy.py", "analysis", check=False)      # BDM destekli hiyerarşik yönlendirme politikası (tablo + fig_policy)
     run("python paper/extra_stats.py", "analysis", check=False)   # sıra uyumu, kNN oylaması, ek McNemar testleri, kaskad maliyeti
     from IPython.display import Image, display
     for f in ["fig_main.png", "fig_deferral.png", "fig_routing.png"]:

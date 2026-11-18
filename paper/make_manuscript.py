@@ -29,6 +29,9 @@ OUT = ROOT / "paper"
 
 PENDING = "[pending]"
 ANON = "--anon" in sys.argv     # copy for double-anonymized review: no author details, institution name or repository owner
+SUPP = "--supp" in sys.argv     # appendices go to a separate Supplementary Material file (journals that ask for one)
+APPX_A = "Table S1 of the Supplementary Material" if SUPP else "Appendix A"
+APPX_B = "Section S2 of the Supplementary Material" if SUPP else "Appendix B"
 sys.path.insert(0, str(OUT))
 import statements as S          # noqa: E402  (declarations shared with the title page and the cover letter)
 
@@ -38,7 +41,8 @@ def load():
     R = {"st": json.loads((RES / "dataset_stats.json").read_text())}
     R["prep"] = json.loads((RES / "preprocessing_stats.json").read_text()) if (RES / "preprocessing_stats.json").exists() else {}
     for name in ["main", "all_configurations", "per_class", "mcnemar", "deferral", "cascade", "error_summary", "confused_pairs",
-                 "ablation_lexical", "ablations", "cost", "dataset_classes", "representatives", "mcnemar_extra", "calibration", "hierarchical"]:
+                 "ablation_lexical", "ablations", "cost", "dataset_classes", "representatives", "mcnemar_extra", "calibration", "hierarchical",
+                 "policy"]:
         f = TAB / f"{name}.csv"
         R[name] = pd.read_csv(f) if f.exists() else None
     R["ex"] = json.loads((TAB / "extra_stats.json").read_text()) if (TAB / "extra_stats.json").exists() else {}
@@ -132,6 +136,19 @@ def build(R):
         return "p < 0.001" if p < 0.001 else f"p = {p:.2f}" if p >= 0.1 else f"p = {p:.3f}"
     deid = R["deid"]
     LEXN = ex.get("lexical_representative", lex["system"] if lex is not None else "")     # name of the lexical representative in extra_stats
+    pol = R["policy"]
+    def PL(system_prefix, llm, tgt):
+        """Row of the LLM-informed routing policy table (llm='none' for the local back-off)."""
+        if pol is None:
+            return None
+        m = pol["local_system"].str.startswith(system_prefix) & (abs(pol["target"] - tgt) < 1e-9)
+        m &= pol["llm"].str.startswith("none") if llm == "none" else (pol["llm"] == llm)
+        r = pol[m]
+        return r.iloc[0] if len(r) else None
+    def dci(r, col):
+        lo, hi = json.loads(r[f"{col}_ci"])
+        sg = lambda v: f"{100*v:+.1f}".replace("-", "−")
+        return f"{sg(r[col])} points, 95% CI [{sg(lo)}, {sg(hi)}]"
     _plan = ex.get("rag_prompts_asked_again", {}).get("rag10__test")     # RAG prompts asked again after the retrieval moved to de-identified text
     rr_share = _plan["changed"] / _plan["documents"] if _plan else None
     mce = R["mcnemar_extra"]
@@ -193,33 +210,35 @@ def build(R):
     local_mf1_max = float(main.loc[main["group"] != "LLM", "macro_f1"].max())
     zs_lo, zs_hi = min(r["accuracy"] for r in zs), max(r["accuracy"] for r in zs)
     rg_lo, rg_hi = min(r["accuracy"] for r in rg), max(r["accuracy"] for r in rg)
+    _b95 = PL("BERTurk", "none", 0.95)
+    _bp = [PL("BERTurk", l, 0.95) for l in ["Gemini 3.8 Flash", "GPT-6 Luna", "Claude Haiku 5.5"]]
+    pol_lo, pol_hi = min(r["test_staff_share"] for r in _bp), max(r["test_staff_share"] for r in _bp)
     highlights = [
         f"Routing of {n_docs:,} de-identified Turkish EDMS documents on a chronological test",
-        f"TF-IDF on native Turkish text rivals fine-tuned BERTurk; translation costs {tr_drop:.0f} points",
+        f"LLM-informed back-off leaves {100*pol_lo:.0f}–{100*pol_hi:.0f}% of documents to staff instead of {100*_b95['test_staff_share']:.0f}%",
         f"Retrieved past documents lift LLM routing accuracy from {100*zs_lo:.0f}–{100*zs_hi:.0f}% to {100*rg_lo:.0f}–{100*rg_hi:.0f}%",
+        f"TF-IDF on native Turkish text rivals fine-tuned BERTurk; translation costs {tr_drop:.0f} points",
         f"A BERTurk-to-LLM cascade reaches {pct(cg.get('test_accuracy'))}% with LLM calls for {100*cg.get('llm_share', 0):.0f}% of documents",
-        f"Back-off to department offices leaves only {100*hb95['test_staff_share']:.0f}% of documents to staff",
     ]
     assert all(len(h) <= 85 for h in highlights), [len(h) for h in highlights]     # Elsevier limit
     B.append({"type": "highlights", "items": highlights})
-    B.append({"type": "abstract", "keywords": "Electronic document management; document routing; Turkish text classification; large language models; selective prediction; sentence embeddings",
+    B.append({"type": "abstract", "keywords": "Electronic document management; document routing; Turkish text classification; large language models; selective prediction; hierarchical classification",
               "text": (
-        f"Routing incoming documents to the organisational unit that must act on them remains manual in many electronic document "
-        f"management systems (EDMS). This study treats routing as decision support and evaluates it on {n_docs:,} documents of a Turkish "
-        f"university with {n_cls} target units. The evaluation is chronological (training up to 2021, validation and test in "
-        f"2022), all choices are made on validation data, and macro-averaged metrics with bootstrap intervals and McNemar tests are reported. "
-        f"Term frequency–inverse document frequency (TF-IDF) models on Turkish text, eleven frozen sentence encoders, "
-        f"fine-tuned BERTurk and XLM-RoBERTa, and three large language models (LLMs) prompted zero-shot or with ten retrieved past documents "
-        f"are compared, all on de-identified text. Retrieval raised LLM accuracy from {pct(zs_lo)}–{pct(zs_hi)}% to {pct(rg_lo)}–{pct(rg_hi)}%; "
-        f"the best LLM had the highest macro-F1 ({f3(gem['macro_f1'])} against at most {f3(local_mf1_max)} for local models), but its accuracy "
-        f"({pct(gem['accuracy'])}%) did not differ significantly from a frozen Qwen3 embedding with a support vector machine "
-        f"({pct(qwen['accuracy'])}%). Fine-tuned BERTurk ({pct(ft['accuracy'])}%) and the TF-IDF baseline ({pct(lex['accuracy'])}%) had practically "
-        f"equal macro-F1. Grouped cross-validation gave up to {ex['cv_minus_test_accuracy_points']['max']:.1f} points more than the chronological test, "
-        f"and machine translation to English lowered TF-IDF accuracy by {tr_drop:.1f} points. A cascade passing the {100*cg['llm_share']:.0f}% "
-        f"least confident documents from BERTurk to the LLM reached {pct(cg['test_accuracy'])}% at {100*cg['llm_share']:.0f}% of the LLM "
-        f"cost. Temperature scaling halved the calibration error, and backing off to the department office left {100*hb95['test_staff_share']:.0f}% "
-        f"of documents to staff at a 95% target, although validation thresholds lost up to three points on the test half-year. Code, splits and "
-        f"predictions are released.")})
+        f"Routing incoming documents to the organisational unit that must act on them remains manual in many electronic document management "
+        f"systems (EDMS). The application in engineering is the automatic routing of the official correspondence of a Turkish university, "
+        f"{n_docs:,} documents and {n_cls} target units, as decision support with deferral to staff. The contribution in artificial intelligence "
+        f"is a confidence-aware routing framework with a leakage-controlled, chronological evaluation protocol, and a hierarchical routing policy "
+        f"that fuses a calibrated local classifier with the ranked answer of a retrieval-augmented large language model (LLM) and backs off to "
+        f"department offices when the unit is uncertain. Term frequency–inverse document frequency (TF-IDF) models, eleven frozen sentence "
+        f"encoders, fine-tuned BERTurk and XLM-RoBERTa, and three LLMs were compared on de-identified text with validation-only model selection, "
+        f"bootstrap intervals and McNemar tests. Retrieval raised LLM accuracy from {pct(zs_lo)}–{pct(zs_hi)}% to {pct(rg_lo)}–{pct(rg_hi)}%; the "
+        f"best LLM had the highest macro-F1 ({f3(gem['macro_f1'])} against at most {f3(local_mf1_max)} for local models) but no significant "
+        f"accuracy advantage over a frozen Qwen3 embedding with a support vector machine ({pct(qwen['accuracy'])}%). Fine-tuned BERTurk "
+        f"({pct(ft['accuracy'])}%) and TF-IDF ({pct(lex['accuracy'])}%) had practically equal macro-F1, and machine translation to English lowered "
+        f"TF-IDF accuracy by {tr_drop:.1f} points. At a 95% target accuracy, backing off to department offices left "
+        f"{pct(_b95['test_staff_share'])}% of the documents to staff and the LLM-informed policy {pct(pol_lo)}–{pct(pol_hi)}%, while a cascade "
+        f"passing {100*cg['llm_share']:.0f}% of the documents to the LLM reached {pct(cg['test_accuracy'])}% accuracy at {100*cg['llm_share']:.0f}% "
+        f"of the LLM cost. Code, splits and predictions are released.")})
 
     # ---------------------------------------------------------------- 1 introduction
     B.append(H(1, "1. Introduction"))
@@ -248,7 +267,8 @@ def build(R):
         "126 model combinations were ranked on a random split. The present study replaces that design with a leakage-controlled, chronological protocol, "
         "adds the baselines whose absence makes earlier comparisons inconclusive (TF-IDF with linear models, modern multilingual sentence encoders, "
         "fine-tuned Turkish encoders and LLMs), processes Turkish natively, and extends the classifier into a routing mechanism with top-k suggestions, "
-        "confidence-based deferral to staff and an optional LLM second stage. The main contributions are as follows."))
+        "confidence-based deferral to staff, a back-off to department offices and an LLM-informed hierarchical routing policy that consults the LLM "
+        "only where the local model is uncertain. The main contributions are as follows."))
     B.append({"type": "numbered", "id": "", "items": [
         f"A documented construction of a document-level routing dataset from an EDMS dispatch log ({st['n_dispatch_records_raw']:,} records, "
         f"{n_docs:,} documents, {n_cls} units), with an explicit treatment of broadcast circulars, multi-unit dispatch chains, duplicate texts and the label-consistency ceiling of the data, "
@@ -259,7 +279,9 @@ def build(R):
         "encoders and three LLMs), including the lexical baseline that earlier work omitted, with ablations of Turkish preprocessing (raw, stemming, "
         "Zeyrek lemmatisation), input fields, machine translation and sender-unit context.",
         "A confidence-aware routing framework that turns the classifier into decision support: top-k suggestions, selective automation with thresholds "
-        "chosen on validation data, and a cost- and latency-aware cascade whose low-confidence documents are passed to a retrieval-augmented LLM on de-identified text.",
+        "chosen on validation data, a back-off to department offices, a cost- and latency-aware cascade to a retrieval-augmented LLM, and an "
+        "LLM-informed hierarchical routing policy that fuses the calibrated local posterior with the ranked answer of the LLM and decides between "
+        "the unit, the department office and staff.",
         "A fully reproducible release (code, splits, seeds, hyper-parameters and prediction files) and a critical discussion of what the results do and do not support.",
     ]})
     B.append(P(
@@ -536,7 +558,7 @@ def build(R):
         "it then needs one forwarding step inside the department, unless the office itself was the target. The Rectorate forms a department of its "
         "own, so for it the two levels coincide."))
     B.append(P(
-        "*LLM second stage.* Documents below the threshold can be passed to an LLM instead of to staff. The prompt (Appendix B) contains the list of the "
+        "*LLM second stage.* Documents below the threshold can be passed to an LLM instead of to staff. The prompt (" + APPX_B + ") contains the list of the "
         f"{n_cls} units with a one-sentence description of their duties, written from the units' functions and the document types observed in the training "
         "partition, and asks for the three most likely units as JSON. In the *zero-shot* mode the model sees only the document; in the "
         "*retrieval-augmented* mode (rag10) it also sees the ten most similar documents of the training pool (TF-IDF cosine similarity; the pool is the "
@@ -561,6 +583,25 @@ def build(R):
         "*Cascade.* The cascade is evaluated as in Chen et al. (2023): documents are sent to the LLM in increasing order of local confidence, the share "
         "sent is chosen on the validation partition (the smallest share whose validation accuracy is within one point of the LLM alone, and the share "
         "with the highest validation accuracy), and the resulting accuracy, token cost and latency are reported on the test partition."))
+    B.append(P(
+        "*LLM-informed hierarchical routing.* The cascade replaces the local decision by the LLM's answer, which carries no confidence, and the "
+        "back-off ignores the LLM. The routing policy proposed here combines the local model, the LLM and the organisational hierarchy in one "
+        "decision rule. A document that the local model cannot route on its own, i.e. whose calibrated confidence is below the unit threshold "
+        "t_{q} of the local back-off for the same target, is sent to the LLM, and the LLM's ranked answer is treated as noisy evidence about the "
+        "unit. With r(y) ∈ {1, 2, 3, 0} the rank of unit y in the answer (0: not listed) and π_{r} the probability that the true unit is at rank r "
+        "divided by the number of units at that rank, estimated on the queried validation documents, the fused posterior is"))
+    B.append({"type": "equation", "text": "P_{F}(y | x) ∝ exp([log P_{L}(y | x) + γ · log π_{r(y)}] / T_{F})", "label": "(5)"})
+    B.append(P(
+        "where P_{L} is the temperature-scaled local posterior and the evidence weight γ and the temperature T_{F} are fitted on the queried "
+        "validation documents by minimising the negative log-likelihood; γ < 1 discounts the dependence between two sources that have learned "
+        "from the same archive. Documents above t_{q} are not sent to the LLM and keep their local posterior. The hierarchical decision of the "
+        "back-off is then applied to P_{F}: a document is routed to the most probable unit if its probability reaches t_{u}, otherwise to the office "
+        "of the department with the largest probability mass if that mass reaches t_{d}, and otherwise to staff, with t_{u} and t_{d} chosen on "
+        "validation as before. Every automatic decision therefore rests on a probability that can be inspected, and the LLM is consulted only "
+        "where the local model is uncertain. Two simpler combinations were also evaluated during development: the local back-off of Section 5.6, "
+        "and a back-off to the department proposed by the LLM, accepted when the local model's probability mass for that department reaches t_{d}. "
+        "On the validation partition the fused posterior left the fewest documents to staff in eight of the twelve settings (two first stages, "
+        "three LLMs, two targets), including all six at the 95% target, and it is the variant reported in Section 5.8."))
     B.append(H(2, "4.6. Evaluation protocol and metrics"))
     B.append(P(
         f"*Partitions.* Documents dated up to 31 December 2021 form the training partition ({sp['train']:,} documents), the first half of 2022 the validation "
@@ -626,7 +667,7 @@ def build(R):
         top5 = main.loc[main["group"] != "LLM", "macro_f1"].nlargest(5)
         drop = (main["val_macro_f1"] - main["macro_f1"]); big = main.loc[drop.idxmax()]
         B.append(P(
-            f"⟦T:main⟧ and ⟦F:main⟧ summarise the main comparison; the full grid with every classifier family is given in Appendix A. The "
+            f"⟦T:main⟧ and ⟦F:main⟧ summarise the main comparison; the full grid with every classifier family is given in {APPX_A}. The "
             f"retrieval-augmented Gemini 3.8 Flash had the highest validation macro-F1 ({f3(gem['val_macro_f1'])}) and is therefore the final system "
             f"under the protocol; it also had the highest test accuracy, {pct(gem['accuracy'])}% (95% CI {ci(gem['accuracy_ci'])}), and macro-F1, "
             f"{pct(gem['macro_f1'])}% (CI {ci(gem['macro_f1_ci'])}). GPT-6 Luna and Claude Haiku 5.5 with retrieval reached {pct(gpt['accuracy'])}% and "
@@ -966,7 +1007,66 @@ def build(R):
             f"to Gemini (the smallest share within one point of the LLM on validation) gave {pct(tg_min['test_accuracy']) if tg_min is not None else PENDING}% "
             f"and sending {100*tg['llm_share'] if tg is not None else 0:.0f}% (the best validation accuracy) "
             f"{pct(tg['test_accuracy']) if tg is not None else PENDING}%."))
-    B.append(H(2, "5.8. Computational cost"))
+    B.append(H(2, "5.8. LLM-informed hierarchical routing"))
+    if pol is not None and len(pol):
+        rows = []
+        for sysname, short in (("BERTurk", "BERTurk"), ("TF-IDF", "TF-IDF")):
+            for tgt in (0.90, 0.95):
+                for llm_lab in ["none", "Gemini 3.8 Flash", "GPT-6 Luna", "Claude Haiku 5.5"]:
+                    r = PL(sysname, llm_lab, tgt)
+                    if r is None:
+                        continue
+                    base_ = llm_lab == "none"
+                    def dcell(col):
+                        if base_:
+                            return "–"
+                        lo, hi = json.loads(r[f"{col}_ci"])
+                        return f"{100*r[col]:+.1f} [{100*lo:+.1f}, {100*hi:+.1f}]".replace("-", "−")
+                    rows.append([f"{short}" + ("" if base_ else f" + {llm_lab}"), f"{int(100*tgt)}%", f"{100*r['llm_share']:.0f}",
+                                 f"{100*r['test_unit_share']:.1f} / {100*r['test_unit_acc']:.1f}", f"{100*r['test_office_share']:.1f} / {100*r['test_office_dept_acc']:.1f}",
+                                 f"{100*r['test_staff_share']:.1f}", f"{100*r['test_wrong_share']:.1f}", dcell("diff_staff"), dcell("diff_wrong")])
+        B.append({"type": "table", "caption": "⟦T:policy⟧. LLM-informed hierarchical routing (Section 4.5) against the local back-off on the test partition, with all thresholds chosen on "
+                  "validation for the target accuracy. LLM calls: share of documents sent to the LLM; unit: share / accuracy of the documents routed to a unit; office: share / "
+                  "department-level accuracy of the documents routed to a department office; staff: share left to staff; wrong: share of all documents routed to a wrong "
+                  "unit or department; Δ: difference to the local back-off with the same first stage, in points, with 95% paired bootstrap interval (2,000 resamples). "
+                  "Values in %; BERTurk: seed 0.",
+                  "columns": ["First stage + LLM", "Target", "LLM calls", "Unit", "Office", "Staff", "Wrong", "Δ staff", "Δ wrong"],
+                  "col_widths": [0.22, 0.07, 0.07, 0.11, 0.11, 0.07, 0.07, 0.14, 0.14], "font_size": 13, "rows": rows})
+        b95, t95 = PL("BERTurk", "none", 0.95), PL("TF-IDF", "none", 0.95)
+        L = ["Gemini 3.8 Flash", "GPT-6 Luna", "Claude Haiku 5.5"]
+        bp = [PL("BERTurk", l, 0.95) for l in L]; tp = [PL("TF-IDF", l, 0.95) for l in L]
+        sig_staff = sum(json.loads(r["diff_staff_ci"])[1] < 0 for r in bp + tp)
+        w95 = [r["diff_wrong"] for r in bp + tp]
+        all90 = [PL(s_, l, 0.90) for s_ in ("BERTurk", "TF-IDF") for l in L]
+        sgn = lambda v: f"{100*v:+.1f}".replace("-", "−")
+        gb = pol.loc[pol["local_system"].str.startswith("BERTurk"), "evidence_weight"].dropna()
+        gt = pol.loc[pol["local_system"].str.startswith("TF-IDF"), "evidence_weight"].dropna()
+        bg = bp[0]
+        B.append(P(
+            f"⟦T:policy⟧ and ⟦F:policy⟧ compare the LLM-informed policy of Section 4.5 with the local back-off of Section 5.6, both with thresholds "
+            f"chosen on validation for the same target. At the 95% target, the policy reduced the share of test documents left to staff in all six "
+            f"combinations of first stage and LLM, from {pct(b95['test_staff_share'])}% to {pct(min(r['test_staff_share'] for r in bp))}–"
+            f"{pct(max(r['test_staff_share'] for r in bp))}% with BERTurk and from {pct(t95['test_staff_share'])}% to "
+            f"{pct(min(r['test_staff_share'] for r in tp))}–{pct(max(r['test_staff_share'] for r in tp))}% with TF-IDF, and the bootstrap interval of "
+            f"the reduction excluded zero in {small(sig_staff)} of them. The share of documents routed to a wrong unit or department changed by "
+            f"{sgn(min(w95))} to {sgn(max(w95))} points: it fell with Gemini for both first stages (with BERTurk {dci(bg, 'diff_wrong')}, "
+            f"together with {dci(bg, 'diff_staff')} in the staff share) and rose slightly when GPT-6 Luna or Claude Haiku was added to BERTurk. "
+            f"The gain arises at the department level: the unit shares hardly changed ({pct(min(r['test_unit_share'] for r in bp))}–"
+            f"{pct(max(r['test_unit_share'] for r in bp))}% against {pct(b95['test_unit_share'])}% with BERTurk), whereas the LLM's evidence "
+            f"concentrated the probability mass of uncertain documents on one department, so that more of them reached a department office instead "
+            f"of staff; with Gemini, the department-level accuracy of these decisions also came closer to the target ({pct(bg['test_office_dept_acc'])}% "
+            f"against {pct(b95['test_office_dept_acc'])}%). At the 90% target the effects were smaller and mixed (staff share "
+            f"{sgn(min(r['diff_staff'] for r in all90))} to {sgn(max(r['diff_staff'] for r in all90))} points, wrong routings "
+            f"{sgn(min(r['diff_wrong'] for r in all90))} to {sgn(max(r['diff_wrong'] for r in all90))} points). The price is the number of "
+            f"LLM calls: at the 95% target the local model cannot route {pct(bg['llm_share'], 0)}% of the documents on its own with BERTurk and "
+            f"{pct(tp[0]['llm_share'], 0)}% with TF-IDF, which costs USD {min(r['llm_usd_per_1000_docs'] for r in bp):.2f}–"
+            f"{max(r['llm_usd_per_1000_docs'] for r in bp):.2f} per 1,000 documents with BERTurk; at the 90% target the shares fall to "
+            f"{pct(all90[0]['llm_share'], 0)}% and {pct(all90[3]['llm_share'], 0)}%. The fitted evidence weights were lower with BERTurk "
+            f"(γ = {gb.min():.2f}–{gb.max():.2f}) than with TF-IDF (γ = {gt.min():.2f}–{gt.max():.2f}), i.e. the LLM's answer adds less to the "
+            f"stronger first stage."))
+    B.append(fig_block("fig_policy", "⟦F:policy⟧. Share of test documents routed to the unit, to a department office or to staff at the 95% target, for the local back-off and the "
+                       "LLM-informed policy with each LLM; (a) fine-tuned BERTurk (seed 0) and (b) TF-IDF as first stage. 'wrong': share of all documents routed to a wrong unit or department."))
+    B.append(H(2, "5.9. Computational cost"))
     cost = R["cost"]
     if cost is not None and len(cost):
         keep = set(main.loc[main["group"] != "LLM", "system"]) if main is not None else set()
@@ -1008,7 +1108,8 @@ def build(R):
         f"{100*(hai['accuracy']-knn.get('test_accuracy', 0)):.0f}–{100*(gem['accuracy']-knn.get('test_accuracy', 0)):.0f} points above the vote of "
         "the retrieved documents themselves, and gave the best of them the highest macro-F1 of the study. Fourth, local confidence is informative: "
         "errors of the fine-tuned and lexical models concentrate in the low-confidence tail, which is what lets a cascade match the accuracy of the "
-        f"LLM while calling it for {100*cg['llm_share']:.0f}% of the documents."))
+        f"LLM while calling it for {100*cg['llm_share']:.0f}% of the documents, and what lets the LLM-informed policy consult the LLM only where the "
+        "local model is uncertain."))
     B.append(P(
         "Three qualifications apply. Absolute confidence thresholds chosen on one half-year lost up to three points of accuracy on the next; "
         f"validation macro-F1 ranked {big['system'].split(' / ')[0]} almost level with Gemini but overstated its test macro-F1 by "
@@ -1016,8 +1117,10 @@ def build(R):
         "the seed of the fine-tuned model. The first two argue for periodic re-validation on recent documents rather than for a one-off model choice, "
         "the third for reporting seed variation. The practical consequence is that the useful question is not 'which model is most accurate?' but "
         "'how many documents can be automated at the accuracy the institution accepts, and what happens to the rest?'. The framework answers it with "
-        "the top-3 suggestion, deferral to staff, the back-off to department offices and the LLM cascade; with the back-off, only "
-        f"{pct(hb90['test_staff_share'], 0)}–{pct(hb95['test_staff_share'], 0)}% of the documents still need a manual first-level decision."))
+        "the top-3 suggestion, deferral to staff, the back-off to department offices, the LLM cascade and the LLM-informed policy; with the "
+        f"back-off, only {pct(hb90['test_staff_share'], 0)}–{pct(hb95['test_staff_share'], 0)}% of the documents still need a manual first-level "
+        f"decision, and at the 95% target the LLM-informed policy lowers this share to {pct(min(r['test_staff_share'] for r in bp), 0)}–"
+        f"{pct(max(r['test_staff_share'] for r in bp), 0)}% with BERTurk as first stage."))
     B.append(P(
         "Decision support also needs reasons that a dispatcher can check. The cascade supplies them without extra machinery: the retrieved past "
         "documents and their units, which the LLM sees, can be displayed with every suggestion as case-based evidence (Kenny et al., 2021), and the "
@@ -1063,7 +1166,11 @@ def build(R):
         "imperfect: it can miss names written in unusual forms and mask words that are not names, the English recogniser masked more spans than the "
         "Turkish one (Section 5.2), and indirect identifiers remain, so an institution deploying the cascade must assess the residual disclosure risk "
         "under its own regulation; documents whose de-identified text consists of little more than a name placeholder cannot be routed from their "
-        "text at all. Finally, the cascade and the deferral are simulated on stored predictions; an operational study with dispatchers would be "
+        "text at all. The fusion of Eq. (5) treats the LLM's ranked answer as evidence that is independent of the local posterior up to the weight "
+        "γ, and its parameters and thresholds were fitted on one validation half-year; the policy also sends most of the uncertain documents to the "
+        f"external LLM ({pct(bp[0]['llm_share'], 0)}% of all documents at the 95% target with BERTurk), so its gains have to be weighed against the "
+        "disclosure of de-identified text. Finally, the cascade, the deferral and the routing policies are simulated on stored predictions; an "
+        "operational study with dispatchers would be "
         "needed to measure the actual reduction of processing time and of misrouting, which this paper does not claim."))
 
     # ---------------------------------------------------------------- 7 conclusion
@@ -1080,8 +1187,10 @@ def build(R):
         f"{pct(d_best['accuracy@95'], 0)}% accuracy, and a cascade that passes the {100*cg['llm_share']:.0f}% least confident documents to an LLM "
         f"reached {pct(cg['test_accuracy'])}% accuracy at {100*cg['llm_share']:.0f}% of the LLM cost. Temperature scaling made the confidence of the "
         f"fine-tuned model interpretable, and backing off to department offices reduced the documents that need a manual first-level decision to "
-        f"{pct(hb90['test_staff_share'], 0)}–{pct(hb95['test_staff_share'], 0)}%; thresholds chosen on one half-year lost up to three points on the "
-        f"next, so a deployment should recalibrate them regularly. Future work includes hierarchically trained routing models, sender and "
+        f"{pct(hb90['test_staff_share'], 0)}–{pct(hb95['test_staff_share'], 0)}%. The LLM-informed hierarchical routing policy, which fuses the "
+        f"local posterior with the LLM's ranked answer, lowered this share at the 95% target from {pct(b95['test_staff_share'])}% to "
+        f"{pct(min(r['test_staff_share'] for r in bp))}–{pct(max(r['test_staff_share'] for r in bp))}%, and with Gemini also reduced the wrongly "
+        f"routed documents. Thresholds chosen on one half-year lost up to three points on the next, so a deployment should recalibrate them regularly. Future work includes hierarchically trained routing models, sender and "
         f"correspondence-direction features (the sender unit alone raised the accuracy of the lexical model by about "
         f"{small(round(100*(sr['accuracy']-base['accuracy'])))} points), on-premise open-weight LLMs for the second stage, which would keep every document "
         f"inside the institution, and a prospective study of the framework in the dispatch workflow."))
@@ -1107,9 +1216,13 @@ def build(R):
     B.append(H(1, "References"))
     B.append({"type": "references", "items": sorted(REFERENCES, key=ref_key)})
 
-    # ---------------------------------------------------------------- appendices
-    B.append({"type": "pagebreak"})
-    B.append(H(1, "Appendix A. Results of every classifier family"))
+    # ---------------------------------------------------------------- appendices (or supplementary material)
+    main_blocks = B
+    if SUPP:
+        B = []
+    else:
+        B.append({"type": "pagebreak"})
+    B.append(H(1, "S1. Results of every classifier family" if SUPP else "Appendix A. Results of every classifier family"))
     allc = R["all_configurations"]
     if allc is not None and len(allc):
         def hp(params, system):
@@ -1124,18 +1237,21 @@ def build(R):
             return ", ".join(out) if out else d.get("kind", "–")
         rows = [[r.system, f"{100*r.accuracy:.1f}", f"{100*r.macro_f1:.1f}", f"{100*r.weighted_f1:.1f}", f"{100*r.balanced_accuracy:.1f}",
                  f"{100*r.top3_accuracy:.1f}" if not pd.isna(r.top3_accuracy) else "–", hp(r.params, r.system)] for r in allc.itertuples()]
-        B.append({"type": "table", "caption": "Table A1. Test-partition results of every representation × classifier family (values in %) with the hyper-parameters selected on validation (cw: class weight; leaf: minimum leaf size; RF with 200 trees, KNN with cosine distance and distance weighting, RBF SVM with γ = scale; fine-tuned encoders: learning rate and epochs, one row per seed).",
+        B.append({"type": "table", "caption": ("Table S1." if SUPP else "Table A1.") + " Test-partition results of every representation × classifier family (values in %) with the hyper-parameters selected on validation (cw: class weight; leaf: minimum leaf size; RF with 200 trees, KNN with cosine distance and distance weighting, RBF SVM with γ = scale; fine-tuned encoders: learning rate and epochs, one row per seed).",
                   "columns": ["System", "Acc.", "Macro-F1", "wF1", "Bal. acc.", "Top-3", "Selected hyper-parameters"],
                   "col_widths": [0.3, 0.08, 0.09, 0.08, 0.09, 0.08, 0.28], "font_size": 13, "rows": rows})
-    B.append(H(1, "Appendix B. LLM prompt"))
+    B.append(H(1, "S2. LLM prompt" if SUPP else "Appendix B. LLM prompt"))
     from llm import SYSTEM, UNIT_DESCRIPTIONS  # noqa: E402
     B.append(P("System instruction (translated from Turkish): *You are an assistant that routes incoming documents in a university's electronic document management "
                "system to the unit that must act on them. The subject and content of the document will be given. From the list of units below, rank the three units "
                "to which the document is most likely to be dispatched for action, starting with the most likely. Use the unit names exactly as written. Return only "
                "JSON: {\"birimler\": [\"unit1\", \"unit2\", \"unit3\"]}.* The list of units with their duty descriptions follows; in the retrieval-augmented mode the user "
                "message contains the ten most similar past documents with their units before the document to be routed."))
-    B.append({"type": "table", "caption": "Table B1. Unit descriptions used in the prompt (Turkish, as sent to the models).", "columns": ["Unit", "Description"],
+    B.append({"type": "table", "caption": ("Table S2." if SUPP else "Table B1.") + " Unit descriptions used in the prompt (Turkish, as sent to the models).", "columns": ["Unit", "Description"],
               "col_widths": [0.3, 0.7], "font_size": 14, "rows": [[u, d] for u, d in UNIT_DESCRIPTIONS.items()]})
+    if SUPP:
+        supp_meta = dict(meta, title="Supplementary Material: " + S.TITLE)
+        return {"meta": meta, "blocks": main_blocks}, {"meta": supp_meta, "blocks": B}
     return {"meta": meta, "blocks": B}
 
 
@@ -1241,9 +1357,18 @@ def number_blocks(M):
 
 def main():
     R = load()
-    M = number_blocks(build(R))
+    built = build(R)
     OUT.mkdir(exist_ok=True)
-    js, docx_out = (OUT / "manuscript_anon.json", OUT / "Manuscript_anonymized.docx") if ANON else (OUT / "manuscript.json", OUT / "Manuscript.docx")
+    if SUPP:
+        built, supp = built
+        sj, sd = OUT / ("supplementary_anon.json" if ANON else "supplementary.json"), OUT / ("Supplementary_Material_anonymized.docx" if ANON else "Supplementary_Material.docx")
+        sj.write_text(json.dumps(supp, ensure_ascii=False, indent=1))
+        subprocess.run(["node", str(OUT / "render_docx.js"), str(sj), str(sd)], check=True)
+    M = number_blocks(built)
+    tag = ("_anon" if ANON else "") + ("_main" if SUPP else "")
+    js = OUT / f"manuscript{tag}.json"
+    docx_out = OUT / {"": "Manuscript.docx", "_anon": "Manuscript_anonymized.docx", "_main": "Manuscript_main.docx",
+                      "_anon_main": "Manuscript_main_anonymized.docx"}[tag]
     js.write_text(json.dumps(M, ensure_ascii=False, indent=1))
     n_pending = json.dumps(M, ensure_ascii=False).count(PENDING)
     subprocess.run(["node", str(OUT / "render_docx.js"), str(js), str(docx_out)], check=True)
